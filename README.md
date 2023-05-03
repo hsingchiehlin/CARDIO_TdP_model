@@ -1,1 +1,2 @@
 # CARDIO_TdP_model
+This repository is constructed for the paper "Proarrhythmic Risk Assessment for Environmental Chemicals Using the Integration of Human Induced Pluripotent Stem Cell-Derived Cardiomyocytes and Bayesian Population Modeling" and contains scripts and data for executing the all analyses in this paper. "Cardio_TdP_EXE_code.rmd" is the main script to reproduce results in the main manuscript (Figs. 2 - 6) and supplementary figures (Figs.S1 - S4). Note that this repository dose not contain the codes for executing Bayesian dose-response modeling and deriving PODs.
