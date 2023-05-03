@@ -1,0 +1,1740 @@
+---
+title: "Cardio_TdP_EXE_code"
+author: "Hsing-Chieh Lin"
+date: "2023-04-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(ROSE)
+library(pROC)
+library(patchwork)
+library(cowplot)
+library(dplyr)
+library(tibble)
+library(scales)
+library(httk)
+library(plyr)
+if(!dir.exists("outputs")) dir.create("outputs")
+if(!dir.exists("plots")) dir.create("plots")
+```
+
+
+```{r Example plot for Dose-response model}
+Model.list <- c("A", "B", "C")
+Che.num.list <- c(6, 17)
+Che.name.list <- c("Disopyramide phosphate", "Cisapride monohydrate")
+
+DR_sim_frame_all <- data.frame()
+DR_obs_frame_all <- data.frame()
+
+for(i in 1:3){
+  
+  Model <- Model.list[i]
+  
+  for(j in 1:2){
+    
+    MCMC_sample.file <- paste("data/DR_dat/Model ", Model, "/C", Che.num.list[j], "_standat_v7_do_stan_fit_Peak_Decay_Rise_Ratio_up_MCMC_Samples.csv", sep = "")
+    MCMC_sample <- read.csv(MCMC_sample.file)
+    
+    source(paste("data/DR_dat/Model ", Model, "/C", Che.num.list[j], "_standat_v7_do_stan_fit_Peak_Decay_Rise_Ratio_up_dat.R", sep = ""))
+    
+    x_sim <- 10^seq(-4, 2, 0.05)
+    
+    DR_frame <- data.frame(matrix(NA, 121, 1000))
+    
+    for(k in 1:1000){
+      y0 <- exp(MCMC_sample$m_y0[k])
+      x0 <- exp(MCMC_sample$m_x0[k])
+      Emax <- exp(MCMC_sample$m_Emax[k])
+      n <- exp(MCMC_sample$m_n[k])
+      
+      for(q in 1:121){
+        DR_frame[q, k] <- (y0 * (1 + (x_sim[q] / x0)^n / (1 + ((x_sim[q] / x0)^n)/Emax)))*scale_factor
+      }
+    }
+      
+    DR_sim_frame <- data.frame(x_sim = x_sim,
+                               y_med = apply(DR_frame, 1, median),
+                               y_UB = apply(DR_frame, 1, function(x) quantile(x, probs = 0.95)),
+                               y_LB = apply(DR_frame, 1, function(x) quantile(x, probs = 0.05)),
+                               Chemical.num = Che.name.list[j], #""Disopyramide phosphate
+                               Dataset = Model)
+    
+    DR_obs_frame <- data.frame(x = x,
+                               y = ys*scale_factor,
+                               Chemical.num = Che.name.list[j],
+                               rep = cell,
+                               Dataset = Model)
+    
+    DR_sim_frame_all <- rbind(DR_sim_frame_all, DR_sim_frame)
+    DR_obs_frame_all <- rbind(DR_obs_frame_all, DR_obs_frame)
+
+  }
+  
+}
+DR_obs_frame_all$rep <- factor(DR_obs_frame_all$rep)
+
+DR_obs_frame_all$x[which(DR_obs_frame_all$x == 0)] <- 0.0001
+
+tiff(width = 6, height = 5.5, "plots/Figure 2.tiff", units = "in", res=400)
+ggplot()+
+  #geom_ribbon(data = DR_sim_frame_all, aes(x = x_sim, ymin = y_LB, ymax = y_UB), fill = "lightgray") +
+  geom_line(data = DR_sim_frame_all, aes(x = log10(x_sim), y = y_med), color = "#B1BDBF", size = 1.1, linetype = 1)+
+  geom_point(data = DR_obs_frame_all, aes(x = log10(x), y = y, color = rep), size = 2.2, alpha = 0.8)+
+  facet_grid(Dataset~Chemical.num, scales = "free")+
+  xlab("Concentration") +
+  ylab("Decay-rise ratio")+
+  #coord_cartesian(ylim = c(0, 20))+
+  scale_x_continuous(lim = c(-4, 2),
+                breaks = c(-4, -1, 0, 1, 2),
+                labels = c("C", 0.1, 1, 10, 100)) +
+  theme_bw() +
+  theme(text=element_text(family="sans", face="plain", color="#000000", hjust=0.5, vjust=0.5), 
+        legend.position = "none",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(size = 12,color = "black", face = "bold"),
+        axis.text = element_text(size = 10,color = "black", face = "bold"),
+        strip.text = element_text(size = 12, color = "black", face = "bold"))
+dev.off()
+```
+
+
+```{r Model A - using POD data from 1 ind without replicates}
+Dataset.A <- read.csv("data/POD_Dataset A.csv") # rep notice
+
+Dataset.A$Peak_Frequency_up[Dataset.A$Peak_Frequency_up > 300] <- 300
+Dataset.A$Peak_Frequency_dn[Dataset.A$Peak_Frequency_dn > 300] <- 300
+Dataset.A$Peak_Decay_Rise_Ratio_up[Dataset.A$Peak_Decay_Rise_Ratio_up > 300] <- 300
+Dataset.A$Peak_Frequency_zero[Dataset.A$Peak_Frequency_zero > 300] <- 300
+Dataset.A$Total_Cells_zero[Dataset.A$Total_Cells_zero > 300] <- 300
+
+BMD50_drug_logit_data_A   <- Dataset.A[which(Dataset.A$Drug_lable == "Drug"), ]
+BMD50_drug_logit_data_A$QT.TdP_Positive_k <- as.factor(BMD50_drug_logit_data_A$QT.TdP_Positive_k)
+BMD50_drug_logit_data_A$QT.TdP_Positive_k_c <- as.factor(BMD50_drug_logit_data_A$QT.TdP_Positive_k_c)
+
+BMD50_5pheno_TdP.risk.model_A <- glm(QT.TdP_Positive_k_c ~ log10(Peak_Frequency_up) + log10(Peak_Frequency_dn) + log10(Peak_Decay_Rise_Ratio_up) + 
+                                     log10(Peak_Frequency_zero) + log10(Total_Cells_zero), 
+                                   data = BMD50_drug_logit_data_A, family = binomial(link = "logit"))
+
+MODEL.A.summary <- summary(BMD50_5pheno_TdP.risk.model_A)
+
+# Generate observed predictor
+BMD50_drug_logit_data_A$Predictor_obs.5Pheno <- predict(BMD50_5pheno_TdP.risk.model_A)
+# Generate predicted predictor
+BMD50_drug_logit_data_A$Predictor_pred.5Pheno <- predict(BMD50_5pheno_TdP.risk.model_A, BMD50_drug_logit_data_A)
+# Predicted risk
+BMD50_drug_logit_data_A$Pred.TdP.risk.5Pheno <- BMD50_5pheno_TdP.risk.model_A$fitted.values
+
+BMD50_drug_logit_data_A$QT.TdP_Positive_k_c <- as.numeric(BMD50_drug_logit_data_A$QT.TdP_Positive_k_c) - 1
+
+Fig.MODEL <- 
+ggplot(BMD50_drug_logit_data_A)+
+  geom_line(aes(Predictor_pred.5Pheno, Pred.TdP.risk.5Pheno), color="#5964FF", size = 1.3)+
+  geom_point(aes(Predictor_obs.5Pheno, QT.TdP_Positive_k_c), color="#33323290", size = 1.8)+
+  ggtitle("A") +
+  xlab("Predictor") + ylab("Probability") +
+  theme_bw()+
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=10, hjust=0.5, vjust=0.5),
+        panel.grid = element_blank(),
+        legend.position = "none",
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(size = 1.2),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold"),
+        axis.text = element_text(color = "black", face = "bold"),
+        strip.text = element_text(size=10, face = "bold"),
+        plot.title = element_text(face="bold", size=15))
+
+
+# SSA plot
+SSA.relationship.All <- data.frame(Thresholds = c(roc.curve(BMD50_drug_logit_data_A$QT.TdP_Positive_k_c, 
+                                                            BMD50_drug_logit_data_A$Pred.TdP.risk.5Pheno, plotit = F)$thresholds[2:56]), #[2:40][2:53]
+                                   
+                                   Sensitivity = c(roc.curve(BMD50_drug_logit_data_A$QT.TdP_Positive_k_c, 
+                                                             BMD50_drug_logit_data_A$Pred.TdP.risk.5Pheno, plotit = F)$true.positive.rate[2:56]),
+                                   
+                                   False.positive.rate = c(roc.curve(BMD50_drug_logit_data_A$QT.TdP_Positive_k_c, 
+                                                                     BMD50_drug_logit_data_A$Pred.TdP.risk.5Pheno, plotit = F)$false.positive.rate[2:56]))
+
+SSA.relationship.All$Specificity <- 1 - SSA.relationship.All$False.positive.rate
+SSA.relationship.All$Accuracy <- (SSA.relationship.All$Sensitivity + SSA.relationship.All$Specificity)/2
+SSA.relationship.All$Gmean <- (SSA.relationship.All$Sensitivity * SSA.relationship.All$Specificity)^(1/2)
+
+Threshold <- SSA.relationship.All$Thresholds[which.max(SSA.relationship.All$Gmean)]
+Sensitivity <- SSA.relationship.All$Sensitivity[which.max(SSA.relationship.All$Gmean)]
+Specificity <- SSA.relationship.All$Specificity[which.max(SSA.relationship.All$Gmean)]
+Accuracy <- SSA.relationship.All$Accuracy[which.max(SSA.relationship.All$Gmean)]
+
+SSA.relationship.All.plot <- cbind(rep(SSA.relationship.All$Thresholds, 4),
+                              stack(SSA.relationship.All[,c(2,4:6)]))
+colnames(SSA.relationship.All.plot)[1] <- "Thresholds"
+
+Fig.SSA <-
+ggplot(SSA.relationship.All.plot) + 
+  geom_line(aes(Thresholds, values, color = ind), linetype = 1, size = 1.3)+
+  geom_vline(xintercept = Threshold, color = "red", linetype = 2, size = 0.8)+
+  ggtitle("B") +
+  labs(x="Thresholds", y="Probability", color = "") +
+  #annotate(geom="text", x=0.4, y=1, color = "red", label=paste("Threshold = ", round(Threshold, digits = 3), sep="")) + 
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=10, hjust=0.5, vjust=0.5),
+        panel.grid = element_blank(),
+        legend.position = c(0.25, 0.3),
+        legend.text = element_text(color = "black", face = "bold"),
+        legend.background = element_rect(fill = "#00000000"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(size = 1.2),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold"),
+        axis.text = element_text(color = "black", face = "bold"),
+        strip.text = element_text(size=10, face = "bold"),
+        plot.title = element_text(face="bold", size=15))
+
+
+# ROC plot
+roc.curve <- roc(BMD50_drug_logit_data_A$QT.TdP_Positive_k_c, BMD50_drug_logit_data_A$Pred.TdP.risk.5Pheno)
+auc <- round(auc(BMD50_drug_logit_data_A$QT.TdP_Positive_k_c, BMD50_drug_logit_data_A$Pred.TdP.risk.5Pheno),3)
+Fig.ROC <-
+ggroc(roc.curve, colour = "#5964FF", size = 1.3) +
+  geom_abline(slope=1, intercept=1) + 
+  annotate(geom="point", x = Specificity, y = Sensitivity, color = "red", size = 2.5) + 
+  annotate(geom="text", x = 0.25, y = 0.25, label=paste0("AUC = ", auc, sep="")) +
+  ggtitle("C") +
+  labs(x="Specificity", y="Sensitivity") +
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=10, hjust=0.5, vjust=0.5),
+        panel.grid = element_blank(),
+        legend.position = c(0.6, 0.20),
+        legend.text = element_text(color = "black", face = "bold"),
+        legend.background = element_rect(fill = "#00000000"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(size = 1.2),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold"),
+        axis.text = element_text(color = "black", face = "bold"),
+        strip.text = element_text(size=10, face = "bold"),
+        plot.title = element_text(face="bold", size=15))
+
+
+# --------------- Predict risk itself --------------- 
+Predicted.risk.results_A <- BMD50_drug_logit_data_A[, c("Chemical.Name", "QT.TdP_Positive_k_c", "Pred.TdP.risk.5Pheno")]
+Predicted.risk.results_A$QT.TdP_Positive_k_c <- factor(Predicted.risk.results_A$QT.TdP_Positive_k_c)
+Predicted.risk.results_A$QT.TdP.risk_Lable[Predicted.risk.results_A$QT.TdP_Positive_k_c == "0"] <- "Negative"
+Predicted.risk.results_A$QT.TdP.risk_Lable[Predicted.risk.results_A$QT.TdP_Positive_k_c == "1"] <- "Positive"
+Predicted.risk.results_A$QT.TdP.risk_Lable <- factor(Predicted.risk.results_A$QT.TdP.risk_Lable)
+Predicted.risk.results_A$order <- (as.numeric(Predicted.risk.results_A$QT.TdP_Positive_k_c) * 10) + Predicted.risk.results_A$Pred.TdP.risk.5Pheno
+
+# Predicted classfication
+Predicted.risk.results_A$Predicted_QT.TdP.risk_Lable[Predicted.risk.results_A$Pred.TdP.risk.5Pheno > Threshold] <- "Positive"
+Predicted.risk.results_A$Predicted_QT.TdP.risk_Lable[Predicted.risk.results_A$Pred.TdP.risk.5Pheno < Threshold] <- "Negative"
+Predicted.risk.results_A$Predicted_QT.TdP.risk_Lable <- factor(Predicted.risk.results_A$Predicted_QT.TdP.risk_Lable)
+
+Predicted.risk.results_A$Ture.False.Lable[which(Predicted.risk.results_A$QT.TdP.risk_Lable == Predicted.risk.results_A$Predicted_QT.TdP.risk_Lable)] <- "Ture"
+Predicted.risk.results_A$Ture.False.Lable[which(Predicted.risk.results_A$QT.TdP.risk_Lable != Predicted.risk.results_A$Predicted_QT.TdP.risk_Lable)] <- "False"
+
+TP <- sum(Predicted.risk.results_A$Ture.False.Lable == "Ture" & Predicted.risk.results_A$Predicted_QT.TdP.risk_Lable == "Positive")
+TN <- sum(Predicted.risk.results_A$Ture.False.Lable == "Ture" & Predicted.risk.results_A$Predicted_QT.TdP.risk_Lable == "Negative")
+FP <- sum(Predicted.risk.results_A$Ture.False.Lable == "False" & Predicted.risk.results_A$Predicted_QT.TdP.risk_Lable == "Positive")
+FN <- sum(Predicted.risk.results_A$Ture.False.Lable == "False" & Predicted.risk.results_A$Predicted_QT.TdP.risk_Lable == "Negative")
+
+Accuracy <- (TP + TN)/(TP + TN + FP + FN)
+Sensitivity <- TP / (TP + FN)
+Specificity <- TN / (TN + FP)
+
+Fig.RISK <-
+ggplot(Predicted.risk.results_A, aes(x=reorder(Chemical.Name, -order), y=Pred.TdP.risk.5Pheno, color = QT.TdP.risk_Lable, shape = Ture.False.Lable)) +
+  geom_point(stat = "identity", size = 2.5) +
+  geom_hline(yintercept = Threshold, color = "red", linetype = 2) +
+  #annotate(geom="text", x=50, y=0.7, label=paste("Accuracy = ", round(Accuracy, digits = 3), sep="")) + 
+  #annotate(geom="text", x=48, y=0.7, label=paste("Sensitivity = ", round(Sensitivity, digits = 3), sep="")) + 
+  #annotate(geom="text", x=46, y=0.7, label=paste("Specificity = ", round(Specificity, digits = 3), sep="")) +
+  scale_y_continuous(breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), limits = c(0, 1))+
+  scale_color_manual(values = c("#5964FF", "#FF5964"))+
+  scale_shape_manual(values = c(1, 16)) + 
+  labs(x = "Chemical", 
+       y= "Probability of positive TdP risk")+
+  ggtitle("D") +
+  coord_flip()+
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=10),
+        title = element_text(color = "black", face = "bold", size=10),
+        panel.grid = element_blank(),
+        panel.grid.major.y = element_line(color = "gray", linetype = 3),
+        panel.border = element_rect(size = 1.2),
+        legend.title = element_text(color = "black", face = "bold"),
+        legend.position = "none", #c(0.85, 0.8)
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold", size=10),
+        axis.text.y = element_text(color = "black", face = "bold"),
+        axis.text.x = element_text(color = "black", face = "bold"),
+        plot.title = element_text(face="bold", size=15))
+
+tiff(width = 10, height = 10, "plots/Figure S1.tiff", units = "in", res=400)
+((Fig.MODEL / Fig.SSA / Fig.ROC) | Fig.RISK) + plot_layout(widths = c(1/2, 1/2))
+dev.off()
+
+
+# --------------- Internal cross-validation --------------- 
+BMD50_drug_logit_data_A_croval   <- Dataset.A[which(Dataset.A$Drug_lable == "Drug"), ]
+BMD50_drug_logit_data_A_croval$QT.TdP_Positive_k <- as.factor(BMD50_drug_logit_data_A_croval$QT.TdP_Positive_k)
+BMD50_drug_logit_data_A_croval$QT.TdP_Positive_k_c <- as.factor(BMD50_drug_logit_data_A_croval$QT.TdP_Positive_k_c)
+
+Predicted.risk.results_A_croval <- BMD50_drug_logit_data_A_croval[, c("Chemical.Name", "QT.TdP_Positive_k", "QT.TdP_Positive_k_c")]
+
+SSA.crossvalidation.data_A <- data.frame(Chemical = NA,
+                                       Plot.num = NA,
+                                       Thresholds = NA,
+                                       Sensitivity = NA,
+                                       False.positive.rate = NA,
+                                       Specificity = NA,
+                                       Accuracy = NA,
+                                       Gmean = NA)
+
+
+for(i in 1:56){
+  
+  logit.data.removeonedrug <- BMD50_drug_logit_data_A_croval[-i, ]
+  
+  risk.model <- glm(QT.TdP_Positive_k_c ~ log10(Peak_Frequency_up) + log10(Peak_Frequency_dn) + log10(Peak_Decay_Rise_Ratio_up) + 
+                      log10(Peak_Frequency_zero) + log10(Total_Cells_zero), 
+                    data = logit.data.removeonedrug, family = binomial(link = "logit"))
+  
+  logit.data.removeonedrug$Pred.TdP.risk.5Pheno <- risk.model$fitted.values
+  
+  # Predict removed chemical risk
+  Predicted.risk.results_A_croval$Predicted_QT.TdP.risk[i] <- predict(risk.model, BMD50_drug_logit_data_A_croval[i, c(5:9)], type = c("response"), se.fit = TRUE)$fit
+  Predicted.risk.results_A_croval$Predicted_QT.TdP.risk.se[i] <- predict(risk.model, BMD50_drug_logit_data_A_croval[i, c(5:9)], type = c("response"), se.fit = TRUE)$se.fit
+  
+  # ROC curve
+  temp.pred.risk.list <- c(logit.data.removeonedrug$Pred.TdP.risk.5Pheno)
+  temp.obse.risk.lable.list <- c(logit.data.removeonedrug$QT.TdP_Positive_k_c)
+  
+  roc.curve <- roc.curve(temp.obse.risk.lable.list, temp.pred.risk.list, 
+                         col = "#5964FF", lwd=3, main = Predicted.risk.results_A_croval$Chemical.Name[i], xlab = "", ylab = "")
+  text(0.7, 0.2, paste("AUC = ", round(roc.curve$auc, digits = 3)))
+  
+  # Grab AUC
+  Predicted.risk.results_A_croval$AUC[i] <- round(roc.curve$auc, digits = 3)
+  
+  # SSA.relationship
+  tep.ssa.data <- data.frame(Chemical = rep(Predicted.risk.results_A_croval$Chemical.Name[i], 54),
+                             Plot.num = rep(i, 54),
+                             Thresholds = roc.curve(temp.obse.risk.lable.list, temp.pred.risk.list, 
+                                                    plotit = F)$thresholds[2:55],
+                             Sensitivity = roc.curve(temp.obse.risk.lable.list, temp.pred.risk.list, 
+                                                     plotit = F)$true.positive.rate[2:55],
+                             False.positive.rate = roc.curve(temp.obse.risk.lable.list, temp.pred.risk.list, 
+                                                             plotit = F)$false.positive.rate[2:55])
+  tep.ssa.data$Specificity <- 1 - tep.ssa.data$False.positive.rate
+  tep.ssa.data$Accuracy <- (tep.ssa.data$Sensitivity * 18 + tep.ssa.data$Specificity * 38)/56
+  tep.ssa.data$Gmean <- (tep.ssa.data$Sensitivity * tep.ssa.data$Specificity)^(1/2)
+  SSA.crossvalidation.data_A <- rbind(SSA.crossvalidation.data_A, tep.ssa.data)
+  
+  # Grab Potential risk threshold
+  Predicted.risk.results_A_croval$Potential.threshold[i] <- tep.ssa.data$Thresholds[which.max(tep.ssa.data$Gmean)]
+  Predicted.risk.results_A_croval$Accuracy[i] <- tep.ssa.data$Accuracy[which.max(tep.ssa.data$Gmean)]
+  Predicted.risk.results_A_croval$Sensitivity[i] <- tep.ssa.data$Sensitivity[which.max(tep.ssa.data$Gmean)]
+  Predicted.risk.results_A_croval$Specificity[i] <- tep.ssa.data$Specificity[which.max(tep.ssa.data$Gmean)]
+  
+  
+  
+  print(Predicted.risk.results_A_croval$Chemical.Name[i])
+  
+}
+
+mean(Predicted.risk.results_A_croval$AUC)
+sd(Predicted.risk.results_A_croval$AUC)
+
+#QuaMedian_50percentile_POD(quants.6_med)_che138_onedonor_1rep: 0.9004643, 0.006747294
+#QuaMedian_50percentile_POD(quants.6_med)_che138_onedonor_5rep: 0.833875, 0.009295282
+#QuaMedian_50percentile_POD(quants.6_med)_138che_5ind: 0.8937857, 0.01080356
+
+# Bar Chart and point chart
+Predicted.risk.results_A_croval$QT.TdP.risk_Lable[Predicted.risk.results_A_croval$QT.TdP_Positive_k_c == "0"] <- "Negative"
+Predicted.risk.results_A_croval$QT.TdP.risk_Lable[Predicted.risk.results_A_croval$QT.TdP_Positive_k_c == "1"] <- "Positive"
+Predicted.risk.results_A_croval$QT.TdP.risk_Lable <- factor(Predicted.risk.results_A_croval$QT.TdP.risk_Lable)
+Predicted.risk.results_A_croval$order <- (as.numeric(Predicted.risk.results_A_croval$QT.TdP_Positive_k_c) * 10) + Predicted.risk.results_A_croval$Predicted_QT.TdP.risk
+
+# Predicted classification
+Predicted.risk.results_A_croval$Predicted_QT.TdP.risk_Lable[Predicted.risk.results_A_croval$Predicted_QT.TdP.risk > Predicted.risk.results_A_croval$Potential.threshold] <- "Positive"
+Predicted.risk.results_A_croval$Predicted_QT.TdP.risk_Lable[Predicted.risk.results_A_croval$Predicted_QT.TdP.risk < Predicted.risk.results_A_croval$Potential.threshold] <- "Negative"
+Predicted.risk.results_A_croval$Predicted_QT.TdP.risk_Lable <- factor(Predicted.risk.results_A_croval$Predicted_QT.TdP.risk_Lable)
+
+Predicted.risk.results_A_croval$Ture.False.Lable[which(Predicted.risk.results_A_croval$QT.TdP.risk_Lable == Predicted.risk.results_A_croval$Predicted_QT.TdP.risk_Lable)] <- "Ture"
+Predicted.risk.results_A_croval$Ture.False.Lable[which(Predicted.risk.results_A_croval$QT.TdP.risk_Lable != Predicted.risk.results_A_croval$Predicted_QT.TdP.risk_Lable)] <- "False"
+
+TP <- sum(Predicted.risk.results_A_croval$Ture.False.Lable == "Ture" & Predicted.risk.results_A_croval$Predicted_QT.TdP.risk_Lable == "Positive")
+TN <- sum(Predicted.risk.results_A_croval$Ture.False.Lable == "Ture" & Predicted.risk.results_A_croval$Predicted_QT.TdP.risk_Lable == "Negative")
+FP <- sum(Predicted.risk.results_A_croval$Ture.False.Lable == "False" & Predicted.risk.results_A_croval$Predicted_QT.TdP.risk_Lable == "Positive")
+FN <- sum(Predicted.risk.results_A_croval$Ture.False.Lable == "False" & Predicted.risk.results_A_croval$Predicted_QT.TdP.risk_Lable == "Negative")
+
+Accuracy <- (TP + TN)/(TP + TN + FP + FN)
+Sensitivity <- TP / (TP + FN)
+Specificity <- TN / (TN + FP)
+
+
+Fig.RISK.croval.ModelA <-
+ggplot(Predicted.risk.results_A_croval, aes(x=reorder(Chemical.Name, -order), y=Predicted_QT.TdP.risk, color = QT.TdP.risk_Lable, shape = Ture.False.Lable)) +
+  geom_rect(xmin = -Inf, xmax = Inf, 
+            ymin = range(Predicted.risk.results_A_croval$Potential.threshold)[1], 
+            ymax = range(Predicted.risk.results_A_croval$Potential.threshold)[2], fill = "#FFF3C1", color = "#FFF3C1") + 
+  geom_point(stat = "identity", size = 2.5) +
+  geom_hline(yintercept = median(Predicted.risk.results_A_croval$Potential.threshold), color = "red", linetype = 2) +
+  annotate(geom="text", x=50, y=0.7, label=paste("Accuracy = ", round(Accuracy, digits = 3), 
+                                                  " (", round(range(Predicted.risk.results_A_croval$Accuracy)[1], digits = 3), " - ",
+                                                  round(range(Predicted.risk.results_A_croval$Accuracy)[2], digits = 3), ")", sep="")) + 
+  annotate(geom="text", x=48, y=0.7, label=paste("Sensitivity = ", round(Sensitivity, digits = 3), 
+                                                   " (", round(range(Predicted.risk.results_A_croval$Sensitivity)[1], digits = 3), " - ",
+                                                   round(range(Predicted.risk.results_A_croval$Sensitivity)[2], digits = 3), ")", sep="")) + 
+  annotate(geom="text", x=46, y=0.7, label=paste("Specificity = ", round(Specificity, digits = 3), 
+                                                  " (", round(range(Predicted.risk.results_A_croval$Specificity)[1], digits = 3), " - ",
+                                                  round(range(Predicted.risk.results_A_croval$Specificity)[2], digits = 3), ")", sep="")) + 
+  annotate(geom="text", x=44, y=0.7, label=paste("Threshold = ", round(median(Predicted.risk.results_A_croval$Potential.threshold), digits = 3), 
+                                                   " (", round(range(Predicted.risk.results_A_croval$Potential.threshold)[1], digits = 3), " - ",
+                                                   round(range(Predicted.risk.results_A_croval$Potential.threshold)[2], digits = 3), ")", sep="")) + 
+  annotate(geom="text", x=42, y=0.7, label=paste("AUC of ROC = ", round(range(Predicted.risk.results_A_croval$AUC)[1], digits = 3), " - ",
+                                                  round(range(Predicted.risk.results_A_croval$AUC)[2], digits = 3), sep="")) +
+  scale_y_continuous(breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), limits = c(0, 1))+
+  scale_color_manual(values = c("#5964FF", "#FF5964"))+
+  scale_shape_manual(values = c(1, 16)) + 
+  ggtitle("A. Model A") +
+  labs(x = "Chemical", 
+       y= "Probability of positive TdP risk")+
+  coord_flip()+
+  labs(x = "Chemical", 
+       y= "Probability of positive TdP risk")+
+  coord_flip()+
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=10),
+        title = element_text(color = "black", face = "bold", size=12),
+        panel.grid = element_blank(),
+        panel.grid.major.y = element_line(color = "gray", linetype = 3),
+        panel.border = element_rect(size = 1.2),
+        legend.title = element_text(color = "black", face = "bold"),
+        legend.position = "none", #c(0.85, 0.8)
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold", size=12),
+        axis.text.y = element_text(color = "black", face = "bold"),
+        axis.text.x = element_text(color = "black", face = "bold"),
+        plot.title = element_text(face="bold", size=15))
+
+
+# --------------- External validation ---------------
+Dataset.A_vali <- read.csv("data/POD_Dataset A_B_validated.csv")
+Dataset.A_vali$Peak_Frequency_up[Dataset.A_vali$Peak_Frequency_up > 300] <- 300
+Dataset.A_vali$Peak_Frequency_dn[Dataset.A_vali$Peak_Frequency_dn > 300] <- 300
+Dataset.A_vali$Peak_Decay_Rise_Ratio_up[Dataset.A_vali$Peak_Decay_Rise_Ratio_up > 300] <- 300
+Dataset.A_vali$Peak_Frequency_zero[Dataset.A_vali$Peak_Frequency_zero > 300] <- 300
+Dataset.A_vali$Total_Cells_zero[Dataset.A_vali$Total_Cells_zero > 300] <- 300
+
+Dataset.A_vali$QT.TdP_Positive_k_c <- NA
+Dataset.A_vali$QT.TdP_Positive_k_c[c(which(Dataset.A_vali$Risk.lable == "Known" | 
+                                                     Dataset.A_vali$Risk.lable == "Conditional" | 
+                                                     Dataset.A_vali$Risk.lable == "FDA (High)"))] <- "1"
+Dataset.A_vali$QT.TdP_Positive_k_c[which(Dataset.A_vali$Risk.lable == "Possible" | 
+                                                   Dataset.A_vali$Risk.lable == "Drug has a Special Risk for patients with congenital Long QT")] <- "0"
+Dataset.A_vali$QT.TdP_Positive_k_c[which(Dataset.A_vali$Risk.lable == "")] <- "0"
+sum(Dataset.A_vali$QT.TdP_Positive_k_c == "1") #check = 28
+Dataset.A_vali$QT.TdP_Positive_k_c <- as.factor(Dataset.A_vali$QT.TdP_Positive_k_c)
+
+BMD50_drug_logit_data_A_extval   <- Dataset.A_vali[which(Dataset.A_vali$Chemical.Class == "Pharmaceutical" | 
+                                                                Dataset.A_vali$Chemical.Class == "CiPA pharmaceutical"), ]
+
+
+# Predicted risk
+BMD50_drug_logit_data_A_extval$Pred.TdP.risk.5Pheno <- predict(BMD50_5pheno_TdP.risk.model_A, BMD50_drug_logit_data_A_extval, type = "response")
+
+Predicted.risk.results_A_extval <- BMD50_drug_logit_data_A_extval[, c("Chemical.Name", "QT.TdP_Positive_k_c", "Pred.TdP.risk.5Pheno")]
+Predicted.risk.results_A_extval$QT.TdP_Positive_k_c <- factor(Predicted.risk.results_A_extval$QT.TdP_Positive_k_c)
+Predicted.risk.results_A_extval$QT.TdP.risk_Lable[Predicted.risk.results_A_extval$QT.TdP_Positive_k_c == "0"] <- "Negative"
+Predicted.risk.results_A_extval$QT.TdP.risk_Lable[Predicted.risk.results_A_extval$QT.TdP_Positive_k_c == "1"] <- "Positive"
+Predicted.risk.results_A_extval$QT.TdP.risk_Lable <- factor(Predicted.risk.results_A_extval$QT.TdP.risk_Lable)
+Predicted.risk.results_A_extval$order <- (as.numeric(Predicted.risk.results_A_extval$QT.TdP_Positive_k_c) * 10) + Predicted.risk.results_A_extval$Pred.TdP.risk.5Pheno
+
+# Predicted classfication
+Predicted.risk.results_A_extval$Predicted_QT.TdP.risk_Lable[Predicted.risk.results_A_extval$Pred.TdP.risk.5Pheno > Threshold] <- "Positive"
+Predicted.risk.results_A_extval$Predicted_QT.TdP.risk_Lable[Predicted.risk.results_A_extval$Pred.TdP.risk.5Pheno < Threshold] <- "Negative"
+Predicted.risk.results_A_extval$Predicted_QT.TdP.risk_Lable <- factor(Predicted.risk.results_A_extval$Predicted_QT.TdP.risk_Lable)
+Predicted.risk.results_A_extval$Ture.False.Lable <- NA
+Predicted.risk.results_A_extval$Ture.False.Lable[which(Predicted.risk.results_A_extval$QT.TdP.risk_Lable == Predicted.risk.results_A_extval$Predicted_QT.TdP.risk_Lable)] <- "Ture"
+Predicted.risk.results_A_extval$Ture.False.Lable[which(Predicted.risk.results_A_extval$QT.TdP.risk_Lable != Predicted.risk.results_A_extval$Predicted_QT.TdP.risk_Lable)] <- "False"
+
+TP <- sum(Predicted.risk.results_A_extval$Ture.False.Lable == "Ture" & Predicted.risk.results_A_extval$Predicted_QT.TdP.risk_Lable == "Positive")
+TN <- sum(Predicted.risk.results_A_extval$Ture.False.Lable == "Ture" & Predicted.risk.results_A_extval$Predicted_QT.TdP.risk_Lable == "Negative")
+FP <- sum(Predicted.risk.results_A_extval$Ture.False.Lable == "False" & Predicted.risk.results_A_extval$Predicted_QT.TdP.risk_Lable == "Positive")
+FN <- sum(Predicted.risk.results_A_extval$Ture.False.Lable == "False" & Predicted.risk.results_A_extval$Predicted_QT.TdP.risk_Lable == "Negative")
+
+Accuracy <- (TP + TN)/(TP + TN + FP + FN)
+Sensitivity <- TP / (TP + FN)
+Specificity <- TN / (TN + FP)
+
+Fig.RISK.extval.ModelA.main <- 
+ggplot(Predicted.risk.results_A_extval, aes(x=reorder(Chemical.Name, -order), y=Pred.TdP.risk.5Pheno, color = QT.TdP.risk_Lable, shape = Ture.False.Lable)) +
+  geom_point(stat = "identity", size = 3.5) +
+  geom_hline(yintercept = Threshold, color = "red", linetype = 2) +
+  #annotate(geom="text", x=120, y=0.8, label=paste("Accuracy = ", round(Accuracy, digits = 3), sep="")) + 
+  #annotate(geom="text", x=120, y=0.7, label=paste("Sensitivity = ", round(Sensitivity, digits = 3), sep="")) + 
+  #annotate(geom="text", x=120, y=0.6, label=paste("Specificity = ", round(Specificity, digits = 3), sep="")) + 
+  scale_y_continuous(breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), limits = c(0, 1))+
+  scale_color_manual(values = c("#5964FF", "#FF5964"))+
+  scale_shape_manual(values = c(1, 16)) + 
+  labs(x = "Chemical", 
+       y= "Probability of positive TdP risk")+
+  ggtitle("A. Model A") +
+  #coord_flip()+
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000"),
+        panel.grid = element_blank(),
+        panel.grid.major.x = element_line(color = "gray", linetype = 3),
+        panel.border = element_rect(size = 1.2),
+        legend.title = element_text(color = "black", face = "bold"),
+        legend.position = "none", #c(0.85, 0.8)
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold", size=12),
+        axis.text.y = element_text(color = "black", face = "bold"),
+        axis.text.x = element_text(color = "black", face = "bold", angle = 65, hjust=1),
+        plot.title = element_text(face="bold", size=15))
+
+# ROC plot
+roc.curve <- roc(BMD50_drug_logit_data_A_extval$QT.TdP_Positive_k_c, BMD50_drug_logit_data_A_extval$Pred.TdP.risk.5Pheno)
+auc <- round(auc(BMD50_drug_logit_data_A_extval$QT.TdP_Positive_k_c, BMD50_drug_logit_data_A_extval$Pred.TdP.risk.5Pheno),3)
+Fig.ROC.extval.ModelA <- 
+ggroc(roc.curve, colour = "#5964FF", size = 1.3) +
+  geom_abline(slope=1, intercept=1) + 
+  annotate(geom="point", x = Specificity, y = Sensitivity, color = "red", size = 2.5) + 
+  annotate(geom="text", x = 0.25, y = 0.25, label=paste0("AUC = ", auc, sep="")) +
+  labs(x="Specificity", y="Sensitivity") +
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=8, hjust=0.5, vjust=0.5),
+        panel.grid = element_blank(),
+        legend.position = c(0.6, 0.20),
+        legend.text = element_text(color = "black", face = "bold"),
+        legend.background = element_rect(fill = "#00000000"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(size = 1.2),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold"),
+        axis.text = element_text(color = "black", face = "bold"),
+        strip.text = element_text(size=10, face = "bold"))
+
+Fig.RISK.extval.ModelA <-
+ggdraw() +
+  draw_plot(Fig.RISK.extval.ModelA.main) +
+  draw_plot(Fig.ROC.extval.ModelA, x = 0.8, y = .65, width = .15, height = .28)
+
+```
+
+
+```{r Model B - using POD data from 1 ind with 5 replicates}
+Dataset.B <- read.csv("data/POD_Dataset B.csv") # rep notice
+
+Dataset.B$Peak_Frequency_up[Dataset.B$Peak_Frequency_up > 300] <- 300
+Dataset.B$Peak_Frequency_dn[Dataset.B$Peak_Frequency_dn > 300] <- 300
+Dataset.B$Peak_Decay_Rise_Ratio_up[Dataset.B$Peak_Decay_Rise_Ratio_up > 300] <- 300
+Dataset.B$Peak_Frequency_zero[Dataset.B$Peak_Frequency_zero > 300] <- 300
+Dataset.B$Total_Cells_zero[Dataset.B$Total_Cells_zero > 300] <- 300
+
+BMD50_drug_logit_data_B   <- Dataset.B[which(Dataset.B$Drug_lable == "Drug"), ]
+BMD50_drug_logit_data_B$QT.TdP_Positive_k <- as.factor(BMD50_drug_logit_data_B$QT.TdP_Positive_k)
+BMD50_drug_logit_data_B$QT.TdP_Positive_k_c <- as.factor(BMD50_drug_logit_data_B$QT.TdP_Positive_k_c)
+
+BMD50_5pheno_TdP.risk.model_B <- glm(QT.TdP_Positive_k_c ~ log10(Peak_Frequency_up) + log10(Peak_Frequency_dn) + log10(Peak_Decay_Rise_Ratio_up) + 
+                                     log10(Peak_Frequency_zero) + log10(Total_Cells_zero), 
+                                   data = BMD50_drug_logit_data_B, family = binomial(link = "logit"))
+
+MODEL.B.summary <- summary(BMD50_5pheno_TdP.risk.model_B)
+
+# Generate observed predictor
+BMD50_drug_logit_data_B$Predictor_obs.5Pheno <- predict(BMD50_5pheno_TdP.risk.model_B)
+# Generate predicted predictor
+BMD50_drug_logit_data_B$Predictor_pred.5Pheno <- predict(BMD50_5pheno_TdP.risk.model_B, BMD50_drug_logit_data_B)
+# Predicted risk
+BMD50_drug_logit_data_B$Pred.TdP.risk.5Pheno <- BMD50_5pheno_TdP.risk.model_B$fitted.values
+
+BMD50_drug_logit_data_B$QT.TdP_Positive_k_c <- as.numeric(BMD50_drug_logit_data_B$QT.TdP_Positive_k_c) - 1
+
+Fig.MODEL <- 
+ggplot(BMD50_drug_logit_data_B)+
+  geom_line(aes(Predictor_pred.5Pheno, Pred.TdP.risk.5Pheno), color="#5964FF", size = 1.3)+
+  geom_point(aes(Predictor_obs.5Pheno, QT.TdP_Positive_k_c), color="#33323290", size = 1.8)+
+  ggtitle("A") +
+  xlab("Predictor") + ylab("Probability") +
+  theme_bw()+
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=10, hjust=0.5, vjust=0.5),
+        panel.grid = element_blank(),
+        legend.position = "none",
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(size = 1.2),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold"),
+        axis.text = element_text(color = "black", face = "bold"),
+        strip.text = element_text(size=10, face = "bold"),
+        plot.title = element_text(face="bold", size=15))
+
+
+# SSA plot
+SSA.relationship.All <- data.frame(Thresholds = c(roc.curve(BMD50_drug_logit_data_B$QT.TdP_Positive_k_c, 
+                                                            BMD50_drug_logit_data_B$Pred.TdP.risk.5Pheno, plotit = F)$thresholds[2:52]), #[2:40][2:53]
+                                   
+                                   Sensitivity = c(roc.curve(BMD50_drug_logit_data_B$QT.TdP_Positive_k_c, 
+                                                             BMD50_drug_logit_data_B$Pred.TdP.risk.5Pheno, plotit = F)$true.positive.rate[2:52]),
+                                   
+                                   False.positive.rate = c(roc.curve(BMD50_drug_logit_data_B$QT.TdP_Positive_k_c, 
+                                                                     BMD50_drug_logit_data_B$Pred.TdP.risk.5Pheno, plotit = F)$false.positive.rate[2:52]))
+
+SSA.relationship.All$Specificity <- 1 - SSA.relationship.All$False.positive.rate
+SSA.relationship.All$Accuracy <- (SSA.relationship.All$Sensitivity + SSA.relationship.All$Specificity)/2
+SSA.relationship.All$Gmean <- (SSA.relationship.All$Sensitivity * SSA.relationship.All$Specificity)^(1/2)
+
+Threshold <- SSA.relationship.All$Thresholds[which.max(SSA.relationship.All$Gmean)]
+Sensitivity <- SSA.relationship.All$Sensitivity[which.max(SSA.relationship.All$Gmean)]
+Specificity <- SSA.relationship.All$Specificity[which.max(SSA.relationship.All$Gmean)]
+Accuracy <- SSA.relationship.All$Accuracy[which.max(SSA.relationship.All$Gmean)]
+
+SSA.relationship.All.plot <- cbind(rep(SSA.relationship.All$Thresholds, 4),
+                              stack(SSA.relationship.All[,c(2,4:6)]))
+colnames(SSA.relationship.All.plot)[1] <- "Thresholds"
+
+Fig.SSA <-
+ggplot(SSA.relationship.All.plot) + 
+  geom_line(aes(Thresholds, values, color = ind), linetype = 1, size = 1.3)+
+  geom_vline(xintercept = Threshold, color = "red", linetype = 2, size = 0.8)+
+  ggtitle("B") +
+  labs(x="Thresholds", y="Probability", color = "") +
+  #annotate(geom="text", x=0.4, y=1, color = "red", label=paste("Threshold = ", round(Threshold, digits = 3), sep="")) + 
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=10, hjust=0.5, vjust=0.5),
+        panel.grid = element_blank(),
+        legend.position = c(0.25, 0.3),
+        legend.text = element_text(color = "black", face = "bold"),
+        legend.background = element_rect(fill = "#00000000"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(size = 1.2),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold"),
+        axis.text = element_text(color = "black", face = "bold"),
+        strip.text = element_text(size=10, face = "bold"),
+        plot.title = element_text(face="bold", size=15))
+
+
+# ROC plot
+roc.curve <- roc(BMD50_drug_logit_data_B$QT.TdP_Positive_k_c, BMD50_drug_logit_data_B$Pred.TdP.risk.5Pheno)
+auc <- round(auc(BMD50_drug_logit_data_B$QT.TdP_Positive_k_c, BMD50_drug_logit_data_B$Pred.TdP.risk.5Pheno),3)
+Fig.ROC <-
+ggroc(roc.curve, colour = "#5964FF", size = 1.3) +
+  geom_abline(slope=1, intercept=1) + 
+  annotate(geom="point", x = Specificity, y = Sensitivity, color = "red", size = 2.5) + 
+  annotate(geom="text", x = 0.25, y = 0.25, label=paste0("AUC = ", auc, sep="")) +
+  ggtitle("C") +
+  labs(x="Specificity", y="Sensitivity") +
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=10, hjust=0.5, vjust=0.5),
+        panel.grid = element_blank(),
+        legend.position = c(0.6, 0.20),
+        legend.text = element_text(color = "black", face = "bold"),
+        legend.background = element_rect(fill = "#00000000"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(size = 1.2),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold"),
+        axis.text = element_text(color = "black", face = "bold"),
+        strip.text = element_text(size=10, face = "bold"),
+        plot.title = element_text(face="bold", size=15))
+
+
+# --------------- Predict risk itself --------------- 
+Predicted.risk.results_B <- BMD50_drug_logit_data_B[, c("Chemical.Name", "QT.TdP_Positive_k_c", "Pred.TdP.risk.5Pheno")]
+Predicted.risk.results_B$QT.TdP_Positive_k_c <- factor(Predicted.risk.results_B$QT.TdP_Positive_k_c)
+Predicted.risk.results_B$QT.TdP.risk_Lable[Predicted.risk.results_B$QT.TdP_Positive_k_c == "0"] <- "Negative"
+Predicted.risk.results_B$QT.TdP.risk_Lable[Predicted.risk.results_B$QT.TdP_Positive_k_c == "1"] <- "Positive"
+Predicted.risk.results_B$QT.TdP.risk_Lable <- factor(Predicted.risk.results_B$QT.TdP.risk_Lable)
+Predicted.risk.results_B$order <- (as.numeric(Predicted.risk.results_B$QT.TdP_Positive_k_c) * 10) + Predicted.risk.results_B$Pred.TdP.risk.5Pheno
+
+# Predicted classfication
+Predicted.risk.results_B$Predicted_QT.TdP.risk_Lable[Predicted.risk.results_B$Pred.TdP.risk.5Pheno > Threshold] <- "Positive"
+Predicted.risk.results_B$Predicted_QT.TdP.risk_Lable[Predicted.risk.results_B$Pred.TdP.risk.5Pheno < Threshold] <- "Negative"
+Predicted.risk.results_B$Predicted_QT.TdP.risk_Lable <- factor(Predicted.risk.results_B$Predicted_QT.TdP.risk_Lable)
+
+Predicted.risk.results_B$Ture.False.Lable[which(Predicted.risk.results_B$QT.TdP.risk_Lable == Predicted.risk.results_B$Predicted_QT.TdP.risk_Lable)] <- "Ture"
+Predicted.risk.results_B$Ture.False.Lable[which(Predicted.risk.results_B$QT.TdP.risk_Lable != Predicted.risk.results_B$Predicted_QT.TdP.risk_Lable)] <- "False"
+
+TP <- sum(Predicted.risk.results_B$Ture.False.Lable == "Ture" & Predicted.risk.results_B$Predicted_QT.TdP.risk_Lable == "Positive")
+TN <- sum(Predicted.risk.results_B$Ture.False.Lable == "Ture" & Predicted.risk.results_B$Predicted_QT.TdP.risk_Lable == "Negative")
+FP <- sum(Predicted.risk.results_B$Ture.False.Lable == "False" & Predicted.risk.results_B$Predicted_QT.TdP.risk_Lable == "Positive")
+FN <- sum(Predicted.risk.results_B$Ture.False.Lable == "False" & Predicted.risk.results_B$Predicted_QT.TdP.risk_Lable == "Negative")
+
+Accuracy <- (TP + TN)/(TP + TN + FP + FN)
+Sensitivity <- TP / (TP + FN)
+Specificity <- TN / (TN + FP)
+
+Fig.RISK <-
+ggplot(Predicted.risk.results_B, aes(x=reorder(Chemical.Name, -order), y=Pred.TdP.risk.5Pheno, color = QT.TdP.risk_Lable, shape = Ture.False.Lable)) +
+  geom_point(stat = "identity", size = 2.5) +
+  geom_hline(yintercept = Threshold, color = "red", linetype = 2) +
+  #annotate(geom="text", x=50, y=0.7, label=paste("Accuracy = ", round(Accuracy, digits = 3), sep="")) + 
+  #annotate(geom="text", x=48, y=0.7, label=paste("Sensitivity = ", round(Sensitivity, digits = 3), sep="")) + 
+  #annotate(geom="text", x=46, y=0.7, label=paste("Specificity = ", round(Specificity, digits = 3), sep="")) +
+  scale_y_continuous(breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), limits = c(0, 1))+
+  scale_color_manual(values = c("#5964FF", "#FF5964"))+
+  scale_shape_manual(values = c(1, 16)) + 
+  labs(x = "Chemical", 
+       y= "Probability of positive TdP risk")+
+  ggtitle("D") +
+  coord_flip()+
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=10),
+        title = element_text(color = "black", face = "bold", size=10),
+        panel.grid = element_blank(),
+        panel.grid.major.y = element_line(color = "gray", linetype = 3),
+        panel.border = element_rect(size = 1.2),
+        legend.title = element_text(color = "black", face = "bold"),
+        legend.position = "none", #c(0.85, 0.8)
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold", size=10),
+        axis.text.y = element_text(color = "black", face = "bold"),
+        axis.text.x = element_text(color = "black", face = "bold"),
+        plot.title = element_text(face="bold", size=15))
+
+tiff(width = 10, height = 10, "plots/Figure S2.tiff", units = "in", res=400)
+((Fig.MODEL / Fig.SSA / Fig.ROC) | Fig.RISK) + plot_layout(widths = c(1/2, 1/2))
+dev.off()
+
+
+# --------------- Internal cross-validation --------------- 
+BMD50_drug_logit_data_B_croval   <- Dataset.B[which(Dataset.B$Drug_lable == "Drug"), ]
+BMD50_drug_logit_data_B_croval$QT.TdP_Positive_k <- as.factor(BMD50_drug_logit_data_B_croval$QT.TdP_Positive_k)
+BMD50_drug_logit_data_B_croval$QT.TdP_Positive_k_c <- as.factor(BMD50_drug_logit_data_B_croval$QT.TdP_Positive_k_c)
+
+Predicted.risk.results_B_croval <- BMD50_drug_logit_data_B_croval[, c("Chemical.Name", "QT.TdP_Positive_k", "QT.TdP_Positive_k_c")]
+
+SSA.crossvalidation.data_B <- data.frame(Chemical = NA,
+                                       Plot.num = NA,
+                                       Thresholds = NA,
+                                       Sensitivity = NA,
+                                       False.positive.rate = NA,
+                                       Specificity = NA,
+                                       Accuracy = NA,
+                                       Gmean = NA)
+
+
+for(i in 1:56){
+  
+  logit.data.removeonedrug <- BMD50_drug_logit_data_B_croval[-i, ]
+  
+  risk.model <- glm(QT.TdP_Positive_k_c ~ log10(Peak_Frequency_up) + log10(Peak_Frequency_dn) + log10(Peak_Decay_Rise_Ratio_up) + 
+                      log10(Peak_Frequency_zero) + log10(Total_Cells_zero), 
+                    data = logit.data.removeonedrug, family = binomial(link = "logit"))
+  
+  logit.data.removeonedrug$Pred.TdP.risk.5Pheno <- risk.model$fitted.values
+  
+  # Predict removed chemical risk
+  Predicted.risk.results_B_croval$Predicted_QT.TdP.risk[i] <- predict(risk.model, BMD50_drug_logit_data_B_croval[i, c(5:9)], type = c("response"), se.fit = TRUE)$fit
+  Predicted.risk.results_B_croval$Predicted_QT.TdP.risk.se[i] <- predict(risk.model, BMD50_drug_logit_data_B_croval[i, c(5:9)], type = c("response"), se.fit = TRUE)$se.fit
+  
+  # ROC curve
+  temp.pred.risk.list <- c(logit.data.removeonedrug$Pred.TdP.risk.5Pheno)
+  temp.obse.risk.lable.list <- c(logit.data.removeonedrug$QT.TdP_Positive_k_c)
+  
+  roc.curve <- roc.curve(temp.obse.risk.lable.list, temp.pred.risk.list, 
+                         col = "#5964FF", lwd=3, main = Predicted.risk.results_B_croval$Chemical.Name[i], xlab = "", ylab = "")
+  text(0.7, 0.2, paste("AUC = ", round(roc.curve$auc, digits = 3)))
+  
+  # Grab AUC
+  Predicted.risk.results_B_croval$AUC[i] <- round(roc.curve$auc, digits = 3)
+  
+  # SSA.relationship
+  tep.ssa.data <- data.frame(Chemical = rep(Predicted.risk.results_B_croval$Chemical.Name[i], 50),
+                             Plot.num = rep(i, 50),
+                             Thresholds = roc.curve(temp.obse.risk.lable.list, temp.pred.risk.list, 
+                                                    plotit = F)$thresholds[2:51],
+                             Sensitivity = roc.curve(temp.obse.risk.lable.list, temp.pred.risk.list, 
+                                                     plotit = F)$true.positive.rate[2:51],
+                             False.positive.rate = roc.curve(temp.obse.risk.lable.list, temp.pred.risk.list, 
+                                                             plotit = F)$false.positive.rate[2:51])
+  tep.ssa.data$Specificity <- 1 - tep.ssa.data$False.positive.rate
+  tep.ssa.data$Accuracy <- (tep.ssa.data$Sensitivity * 18 + tep.ssa.data$Specificity * 38)/56
+  tep.ssa.data$Gmean <- (tep.ssa.data$Sensitivity * tep.ssa.data$Specificity)^(1/2)
+  SSA.crossvalidation.data_B <- rbind(SSA.crossvalidation.data_B, tep.ssa.data)
+  
+  # Grab Potential risk threshold
+  Predicted.risk.results_B_croval$Potential.threshold[i] <- tep.ssa.data$Thresholds[which.max(tep.ssa.data$Gmean)]
+  Predicted.risk.results_B_croval$Accuracy[i] <- tep.ssa.data$Accuracy[which.max(tep.ssa.data$Gmean)]
+  Predicted.risk.results_B_croval$Sensitivity[i] <- tep.ssa.data$Sensitivity[which.max(tep.ssa.data$Gmean)]
+  Predicted.risk.results_B_croval$Specificity[i] <- tep.ssa.data$Specificity[which.max(tep.ssa.data$Gmean)]
+  
+  
+  
+  print(Predicted.risk.results_B_croval$Chemical.Name[i])
+  
+}
+
+mean(Predicted.risk.results_B_croval$AUC)
+sd(Predicted.risk.results_B_croval$AUC)
+
+#QuaMedian_50percentile_POD(quants.6_med)_che138_onedonor_1rep: 0.9004643, 0.006747294
+#QuaMedian_50percentile_POD(quants.6_med)_che138_onedonor_5rep: 0.833875, 0.009295282
+#QuaMedian_50percentile_POD(quants.6_med)_138che_5ind: 0.8937857, 0.01080356
+
+# Bar Chart and point chart
+Predicted.risk.results_B_croval$QT.TdP.risk_Lable[Predicted.risk.results_B_croval$QT.TdP_Positive_k_c == "0"] <- "Negative"
+Predicted.risk.results_B_croval$QT.TdP.risk_Lable[Predicted.risk.results_B_croval$QT.TdP_Positive_k_c == "1"] <- "Positive"
+Predicted.risk.results_B_croval$QT.TdP.risk_Lable <- factor(Predicted.risk.results_B_croval$QT.TdP.risk_Lable)
+Predicted.risk.results_B_croval$order <- (as.numeric(Predicted.risk.results_B_croval$QT.TdP_Positive_k_c) * 10) + Predicted.risk.results_B_croval$Predicted_QT.TdP.risk
+
+# Predicted classification
+Predicted.risk.results_B_croval$Predicted_QT.TdP.risk_Lable[Predicted.risk.results_B_croval$Predicted_QT.TdP.risk > Predicted.risk.results_B_croval$Potential.threshold] <- "Positive"
+Predicted.risk.results_B_croval$Predicted_QT.TdP.risk_Lable[Predicted.risk.results_B_croval$Predicted_QT.TdP.risk < Predicted.risk.results_B_croval$Potential.threshold] <- "Negative"
+Predicted.risk.results_B_croval$Predicted_QT.TdP.risk_Lable <- factor(Predicted.risk.results_B_croval$Predicted_QT.TdP.risk_Lable)
+
+Predicted.risk.results_B_croval$Ture.False.Lable[which(Predicted.risk.results_B_croval$QT.TdP.risk_Lable == Predicted.risk.results_B_croval$Predicted_QT.TdP.risk_Lable)] <- "Ture"
+Predicted.risk.results_B_croval$Ture.False.Lable[which(Predicted.risk.results_B_croval$QT.TdP.risk_Lable != Predicted.risk.results_B_croval$Predicted_QT.TdP.risk_Lable)] <- "False"
+
+TP <- sum(Predicted.risk.results_B_croval$Ture.False.Lable == "Ture" & Predicted.risk.results_B_croval$Predicted_QT.TdP.risk_Lable == "Positive")
+TN <- sum(Predicted.risk.results_B_croval$Ture.False.Lable == "Ture" & Predicted.risk.results_B_croval$Predicted_QT.TdP.risk_Lable == "Negative")
+FP <- sum(Predicted.risk.results_B_croval$Ture.False.Lable == "False" & Predicted.risk.results_B_croval$Predicted_QT.TdP.risk_Lable == "Positive")
+FN <- sum(Predicted.risk.results_B_croval$Ture.False.Lable == "False" & Predicted.risk.results_B_croval$Predicted_QT.TdP.risk_Lable == "Negative")
+
+Accuracy <- (TP + TN)/(TP + TN + FP + FN)
+Sensitivity <- TP / (TP + FN)
+Specificity <- TN / (TN + FP)
+
+
+Fig.RISK.croval.ModelB <-
+ggplot(Predicted.risk.results_B_croval, aes(x=reorder(Chemical.Name, -order), y=Predicted_QT.TdP.risk, color = QT.TdP.risk_Lable, shape = Ture.False.Lable)) +
+  geom_rect(xmin = -Inf, xmax = Inf, 
+            ymin = range(Predicted.risk.results_B_croval$Potential.threshold)[1], 
+            ymax = range(Predicted.risk.results_B_croval$Potential.threshold)[2], fill = "#FFF3C1", color = "#FFF3C1") + 
+  geom_point(stat = "identity", size = 2.5) +
+  geom_hline(yintercept = median(Predicted.risk.results_B_croval$Potential.threshold), color = "red", linetype = 2) +
+  annotate(geom="text", x=50, y=0.7, label=paste("Accuracy = ", round(Accuracy, digits = 3), 
+                                                  " (", round(range(Predicted.risk.results_B_croval$Accuracy)[1], digits = 3), " - ",
+                                                  round(range(Predicted.risk.results_B_croval$Accuracy)[2], digits = 3), ")", sep="")) + 
+  annotate(geom="text", x=48, y=0.7, label=paste("Sensitivity = ", round(Sensitivity, digits = 3), 
+                                                   " (", round(range(Predicted.risk.results_B_croval$Sensitivity)[1], digits = 3), " - ",
+                                                   round(range(Predicted.risk.results_B_croval$Sensitivity)[2], digits = 3), ")", sep="")) + 
+  annotate(geom="text", x=46, y=0.7, label=paste("Specificity = ", round(Specificity, digits = 3), 
+                                                  " (", round(range(Predicted.risk.results_B_croval$Specificity)[1], digits = 3), " - ",
+                                                  round(range(Predicted.risk.results_B_croval$Specificity)[2], digits = 3), ")", sep="")) + 
+  annotate(geom="text", x=44, y=0.7, label=paste("Threshold = ", round(median(Predicted.risk.results_B_croval$Potential.threshold), digits = 3), 
+                                                   " (", round(range(Predicted.risk.results_B_croval$Potential.threshold)[1], digits = 3), " - ",
+                                                   round(range(Predicted.risk.results_B_croval$Potential.threshold)[2], digits = 3), ")", sep="")) + 
+  annotate(geom="text", x=42, y=0.7, label=paste("AUC of ROC = ", round(range(Predicted.risk.results_B_croval$AUC)[1], digits = 3), " - ",
+                                                  round(range(Predicted.risk.results_B_croval$AUC)[2], digits = 3), sep="")) +
+  scale_y_continuous(breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), limits = c(0, 1))+
+  scale_color_manual(values = c("#5964FF", "#FF5964"))+
+  scale_shape_manual(values = c(1, 16)) + 
+  ggtitle("B. Model B") +
+  labs(x = "Chemical", 
+       y= "Probability of positive TdP risk")+
+  coord_flip()+
+  labs(x = "Chemical", 
+       y= "Probability of positive TdP risk")+
+  coord_flip()+
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=10),
+        title = element_text(color = "black", face = "bold", size=12),
+        panel.grid = element_blank(),
+        panel.grid.major.y = element_line(color = "gray", linetype = 3),
+        panel.border = element_rect(size = 1.2),
+        legend.title = element_text(color = "black", face = "bold"),
+        legend.position = "none", #c(0.85, 0.8)
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold", size=12),
+        axis.text.y = element_text(color = "black", face = "bold"),
+        axis.text.x = element_text(color = "black", face = "bold"),
+        plot.title = element_text(face="bold", size=15))
+
+
+# --------------- External validation ---------------
+Dataset.B_vali <- read.csv("data/POD_Dataset A_B_validated.csv")
+Dataset.B_vali$Peak_Frequency_up[Dataset.B_vali$Peak_Frequency_up > 300] <- 300
+Dataset.B_vali$Peak_Frequency_dn[Dataset.B_vali$Peak_Frequency_dn > 300] <- 300
+Dataset.B_vali$Peak_Decay_Rise_Ratio_up[Dataset.B_vali$Peak_Decay_Rise_Ratio_up > 300] <- 300
+Dataset.B_vali$Peak_Frequency_zero[Dataset.B_vali$Peak_Frequency_zero > 300] <- 300
+Dataset.B_vali$Total_Cells_zero[Dataset.B_vali$Total_Cells_zero > 300] <- 300
+
+Dataset.B_vali$QT.TdP_Positive_k_c <- NA
+Dataset.B_vali$QT.TdP_Positive_k_c[c(which(Dataset.B_vali$Risk.lable == "Known" | 
+                                                     Dataset.B_vali$Risk.lable == "Conditional" | 
+                                                     Dataset.B_vali$Risk.lable == "FDA (High)"))] <- "1"
+Dataset.B_vali$QT.TdP_Positive_k_c[which(Dataset.B_vali$Risk.lable == "Possible" | 
+                                                   Dataset.B_vali$Risk.lable == "Drug has a Special Risk for patients with congenital Long QT")] <- "0"
+Dataset.B_vali$QT.TdP_Positive_k_c[which(Dataset.B_vali$Risk.lable == "")] <- "0"
+sum(Dataset.B_vali$QT.TdP_Positive_k_c == "1") #check = 28
+Dataset.B_vali$QT.TdP_Positive_k_c <- as.factor(Dataset.B_vali$QT.TdP_Positive_k_c)
+
+BMD50_drug_logit_data_B_extval   <- Dataset.B_vali[which(Dataset.B_vali$Chemical.Class == "Pharmaceutical" | 
+                                                                Dataset.B_vali$Chemical.Class == "CiPA pharmaceutical"), ]
+
+
+# Predicted risk
+BMD50_drug_logit_data_B_extval$Pred.TdP.risk.5Pheno <- predict(BMD50_5pheno_TdP.risk.model_B, BMD50_drug_logit_data_B_extval, type = "response")
+
+Predicted.risk.results_B_extval <- BMD50_drug_logit_data_B_extval[, c("Chemical.Name", "QT.TdP_Positive_k_c", "Pred.TdP.risk.5Pheno")]
+Predicted.risk.results_B_extval$QT.TdP_Positive_k_c <- factor(Predicted.risk.results_B_extval$QT.TdP_Positive_k_c)
+Predicted.risk.results_B_extval$QT.TdP.risk_Lable[Predicted.risk.results_B_extval$QT.TdP_Positive_k_c == "0"] <- "Negative"
+Predicted.risk.results_B_extval$QT.TdP.risk_Lable[Predicted.risk.results_B_extval$QT.TdP_Positive_k_c == "1"] <- "Positive"
+Predicted.risk.results_B_extval$QT.TdP.risk_Lable <- factor(Predicted.risk.results_B_extval$QT.TdP.risk_Lable)
+Predicted.risk.results_B_extval$order <- (as.numeric(Predicted.risk.results_B_extval$QT.TdP_Positive_k_c) * 10) + Predicted.risk.results_B_extval$Pred.TdP.risk.5Pheno
+
+# Predicted classfication
+Predicted.risk.results_B_extval$Predicted_QT.TdP.risk_Lable[Predicted.risk.results_B_extval$Pred.TdP.risk.5Pheno > Threshold] <- "Positive"
+Predicted.risk.results_B_extval$Predicted_QT.TdP.risk_Lable[Predicted.risk.results_B_extval$Pred.TdP.risk.5Pheno < Threshold] <- "Negative"
+Predicted.risk.results_B_extval$Predicted_QT.TdP.risk_Lable <- factor(Predicted.risk.results_B_extval$Predicted_QT.TdP.risk_Lable)
+Predicted.risk.results_B_extval$Ture.False.Lable <- NA
+Predicted.risk.results_B_extval$Ture.False.Lable[which(Predicted.risk.results_B_extval$QT.TdP.risk_Lable == Predicted.risk.results_B_extval$Predicted_QT.TdP.risk_Lable)] <- "Ture"
+Predicted.risk.results_B_extval$Ture.False.Lable[which(Predicted.risk.results_B_extval$QT.TdP.risk_Lable != Predicted.risk.results_B_extval$Predicted_QT.TdP.risk_Lable)] <- "False"
+
+TP <- sum(Predicted.risk.results_B_extval$Ture.False.Lable == "Ture" & Predicted.risk.results_B_extval$Predicted_QT.TdP.risk_Lable == "Positive")
+TN <- sum(Predicted.risk.results_B_extval$Ture.False.Lable == "Ture" & Predicted.risk.results_B_extval$Predicted_QT.TdP.risk_Lable == "Negative")
+FP <- sum(Predicted.risk.results_B_extval$Ture.False.Lable == "False" & Predicted.risk.results_B_extval$Predicted_QT.TdP.risk_Lable == "Positive")
+FN <- sum(Predicted.risk.results_B_extval$Ture.False.Lable == "False" & Predicted.risk.results_B_extval$Predicted_QT.TdP.risk_Lable == "Negative")
+
+Accuracy <- (TP + TN)/(TP + TN + FP + FN)
+Sensitivity <- TP / (TP + FN)
+Specificity <- TN / (TN + FP)
+
+Fig.RISK.extval.ModelB.main <- 
+ggplot(Predicted.risk.results_B_extval, aes(x=reorder(Chemical.Name, -order), y=Pred.TdP.risk.5Pheno, color = QT.TdP.risk_Lable, shape = Ture.False.Lable)) +
+  geom_point(stat = "identity", size = 3.5) +
+  geom_hline(yintercept = Threshold, color = "red", linetype = 2) +
+  #annotate(geom="text", x=120, y=0.8, label=paste("Accuracy = ", round(Accuracy, digits = 3), sep="")) + 
+  #annotate(geom="text", x=120, y=0.7, label=paste("Sensitivity = ", round(Sensitivity, digits = 3), sep="")) + 
+  #annotate(geom="text", x=120, y=0.6, label=paste("Specificity = ", round(Specificity, digits = 3), sep="")) + 
+  scale_y_continuous(breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), limits = c(0, 1))+
+  scale_color_manual(values = c("#5964FF", "#FF5964"))+
+  scale_shape_manual(values = c(1, 16)) + 
+  labs(x = "Chemical", 
+       y= "Probability of positive TdP risk")+
+  ggtitle("B. Model B") +
+  #coord_flip()+
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000"),
+        panel.grid = element_blank(),
+        panel.grid.major.x = element_line(color = "gray", linetype = 3),
+        panel.border = element_rect(size = 1.2),
+        legend.title = element_text(color = "black", face = "bold"),
+        legend.position = "none", #c(0.85, 0.8)
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold", size=12),
+        axis.text.y = element_text(color = "black", face = "bold"),
+        axis.text.x = element_text(color = "black", face = "bold", angle = 65, hjust=1),
+        plot.title = element_text(face="bold", size=15))
+
+# ROC plot
+roc.curve <- roc(BMD50_drug_logit_data_B_extval$QT.TdP_Positive_k_c, BMD50_drug_logit_data_B_extval$Pred.TdP.risk.5Pheno)
+auc <- round(auc(BMD50_drug_logit_data_B_extval$QT.TdP_Positive_k_c, BMD50_drug_logit_data_B_extval$Pred.TdP.risk.5Pheno),3)
+Fig.ROC.extval.ModelB <- 
+ggroc(roc.curve, colour = "#5964FF", size = 1.3) +
+  geom_abline(slope=1, intercept=1) + 
+  annotate(geom="point", x = Specificity, y = Sensitivity, color = "red", size = 2.5) + 
+  annotate(geom="text", x = 0.25, y = 0.25, label=paste0("AUC = ", auc, sep="")) +
+  labs(x="Specificity", y="Sensitivity") +
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=8, hjust=0.5, vjust=0.5),
+        panel.grid = element_blank(),
+        legend.position = c(0.6, 0.20),
+        legend.text = element_text(color = "black", face = "bold"),
+        legend.background = element_rect(fill = "#00000000"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(size = 1.2),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold"),
+        axis.text = element_text(color = "black", face = "bold"),
+        strip.text = element_text(size=10, face = "bold"))
+
+Fig.RISK.extval.ModelB <-
+ggdraw() +
+  draw_plot(Fig.RISK.extval.ModelB.main) +
+  draw_plot(Fig.ROC.extval.ModelB, x = 0.8, y = .65, width = .15, height = .28)
+
+```
+
+
+```{r Model C - using POD data from 5 ind with 1 replicates}
+Dataset.C <- read.csv("data/POD_Dataset C.csv") # rep notice
+
+Dataset.C$Peak_Frequency_up[Dataset.C$Peak_Frequency_up > 300] <- 300
+Dataset.C$Peak_Frequency_dn[Dataset.C$Peak_Frequency_dn > 300] <- 300
+Dataset.C$Peak_Decay_Rise_Ratio_up[Dataset.C$Peak_Decay_Rise_Ratio_up > 300] <- 300
+Dataset.C$Peak_Frequency_zero[Dataset.C$Peak_Frequency_zero > 300] <- 300
+Dataset.C$Total_Cells_zero[Dataset.C$Total_Cells_zero > 300] <- 300
+
+BMD50_drug_logit_data_C   <- Dataset.C[which(Dataset.C$Drug_lable == "Drug"), ]
+BMD50_drug_logit_data_C$QT.TdP_Positive_k <- as.factor(BMD50_drug_logit_data_C$QT.TdP_Positive_k)
+BMD50_drug_logit_data_C$QT.TdP_Positive_k_c <- as.factor(BMD50_drug_logit_data_C$QT.TdP_Positive_k_c)
+
+BMD50_5pheno_TdP.risk.model_C <- glm(QT.TdP_Positive_k_c ~ log10(Peak_Frequency_up) + log10(Peak_Frequency_dn) + log10(Peak_Decay_Rise_Ratio_up) + 
+                                     log10(Peak_Frequency_zero) + log10(Total_Cells_zero), 
+                                   data = BMD50_drug_logit_data_C, family = binomial(link = "logit"))
+
+MODEL.C.summary <- summary(BMD50_5pheno_TdP.risk.model_C)
+
+# Generate observed predictor
+BMD50_drug_logit_data_C$Predictor_obs.5Pheno <- predict(BMD50_5pheno_TdP.risk.model_C)
+# Generate predicted predictor
+BMD50_drug_logit_data_C$Predictor_pred.5Pheno <- predict(BMD50_5pheno_TdP.risk.model_C, BMD50_drug_logit_data_C)
+# Predicted risk
+BMD50_drug_logit_data_C$Pred.TdP.risk.5Pheno <- BMD50_5pheno_TdP.risk.model_C$fitted.values
+
+BMD50_drug_logit_data_C$QT.TdP_Positive_k_c <- as.numeric(BMD50_drug_logit_data_C$QT.TdP_Positive_k_c) - 1
+
+Fig.MODEL <- 
+ggplot(BMD50_drug_logit_data_C)+
+  geom_line(aes(Predictor_pred.5Pheno, Pred.TdP.risk.5Pheno), color="#5964FF", size = 1.3)+
+  geom_point(aes(Predictor_obs.5Pheno, QT.TdP_Positive_k_c), color="#33323290", size = 1.8)+
+  ggtitle("A") +
+  xlab("Predictor") + ylab("Probability") +
+  theme_bw()+
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=10, hjust=0.5, vjust=0.5),
+        panel.grid = element_blank(),
+        legend.position = "none",
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(size = 1.2),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold"),
+        axis.text = element_text(color = "black", face = "bold"),
+        strip.text = element_text(size=10, face = "bold"),
+        plot.title = element_text(face="bold", size=15))
+
+
+# SSA plot
+SSA.relationship.All <- data.frame(Thresholds = c(roc.curve(BMD50_drug_logit_data_C$QT.TdP_Positive_k_c, 
+                                                            BMD50_drug_logit_data_C$Pred.TdP.risk.5Pheno, plotit = F)$thresholds[2:52]), #[2:40][2:53]
+                                   
+                                   Sensitivity = c(roc.curve(BMD50_drug_logit_data_C$QT.TdP_Positive_k_c, 
+                                                             BMD50_drug_logit_data_C$Pred.TdP.risk.5Pheno, plotit = F)$true.positive.rate[2:52]),
+                                   
+                                   False.positive.rate = c(roc.curve(BMD50_drug_logit_data_C$QT.TdP_Positive_k_c, 
+                                                                     BMD50_drug_logit_data_C$Pred.TdP.risk.5Pheno, plotit = F)$false.positive.rate[2:52]))
+
+SSA.relationship.All$Specificity <- 1 - SSA.relationship.All$False.positive.rate
+SSA.relationship.All$Accuracy <- (SSA.relationship.All$Sensitivity + SSA.relationship.All$Specificity)/2
+SSA.relationship.All$Gmean <- (SSA.relationship.All$Sensitivity * SSA.relationship.All$Specificity)^(1/2)
+
+Threshold <- SSA.relationship.All$Thresholds[which.max(SSA.relationship.All$Gmean)]
+Sensitivity <- SSA.relationship.All$Sensitivity[which.max(SSA.relationship.All$Gmean)]
+Specificity <- SSA.relationship.All$Specificity[which.max(SSA.relationship.All$Gmean)]
+Accuracy <- SSA.relationship.All$Accuracy[which.max(SSA.relationship.All$Gmean)]
+
+SSA.relationship.All.plot <- cbind(rep(SSA.relationship.All$Thresholds, 4),
+                              stack(SSA.relationship.All[,c(2,4:6)]))
+colnames(SSA.relationship.All.plot)[1] <- "Thresholds"
+
+Fig.SSA <-
+ggplot(SSA.relationship.All.plot) + 
+  geom_line(aes(Thresholds, values, color = ind), linetype = 1, size = 1.3)+
+  geom_vline(xintercept = Threshold, color = "red", linetype = 2, size = 0.8)+
+  ggtitle("B") +
+  labs(x="Thresholds", y="Probability", color = "") +
+  #annotate(geom="text", x=0.4, y=1, color = "red", label=paste("Threshold = ", round(Threshold, digits = 3), sep="")) + 
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=10, hjust=0.5, vjust=0.5),
+        panel.grid = element_blank(),
+        legend.position = c(0.5, 0.3),
+        legend.text = element_text(color = "black", face = "bold"),
+        legend.background = element_rect(fill = "#00000000"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(size = 1.2),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold"),
+        axis.text = element_text(color = "black", face = "bold"),
+        strip.text = element_text(size=10, face = "bold"),
+        plot.title = element_text(face="bold", size=15))
+
+
+# ROC plot
+roc.curve <- roc(BMD50_drug_logit_data_C$QT.TdP_Positive_k_c, BMD50_drug_logit_data_C$Pred.TdP.risk.5Pheno)
+auc <- round(auc(BMD50_drug_logit_data_C$QT.TdP_Positive_k_c, BMD50_drug_logit_data_C$Pred.TdP.risk.5Pheno),3)
+Fig.ROC <-
+ggroc(roc.curve, colour = "#5964FF", size = 1.3) +
+  geom_abline(slope=1, intercept=1) + 
+  annotate(geom="point", x = Specificity, y = Sensitivity, color = "red", size = 2.5) + 
+  annotate(geom="text", x = 0.25, y = 0.25, label=paste0("AUC = ", auc, sep="")) +
+  ggtitle("C") +
+  labs(x="Specificity", y="Sensitivity") +
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=10, hjust=0.5, vjust=0.5),
+        panel.grid = element_blank(),
+        legend.position = c(0.6, 0.20),
+        legend.text = element_text(color = "black", face = "bold"),
+        legend.background = element_rect(fill = "#00000000"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(size = 1.2),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold"),
+        axis.text = element_text(color = "black", face = "bold"),
+        strip.text = element_text(size=10, face = "bold"),
+        plot.title = element_text(face="bold", size=15))
+
+
+# --------------- Predict risk itself --------------- 
+Predicted.risk.results_C <- BMD50_drug_logit_data_C[, c("Chemical.Name", "QT.TdP_Positive_k_c", "Pred.TdP.risk.5Pheno")]
+Predicted.risk.results_C$QT.TdP_Positive_k_c <- factor(Predicted.risk.results_C$QT.TdP_Positive_k_c)
+Predicted.risk.results_C$QT.TdP.risk_Lable[Predicted.risk.results_C$QT.TdP_Positive_k_c == "0"] <- "Negative"
+Predicted.risk.results_C$QT.TdP.risk_Lable[Predicted.risk.results_C$QT.TdP_Positive_k_c == "1"] <- "Positive"
+Predicted.risk.results_C$QT.TdP.risk_Lable <- factor(Predicted.risk.results_C$QT.TdP.risk_Lable)
+Predicted.risk.results_C$order <- (as.numeric(Predicted.risk.results_C$QT.TdP_Positive_k_c) * 10) + Predicted.risk.results_C$Pred.TdP.risk.5Pheno
+
+# Predicted classfication
+Predicted.risk.results_C$Predicted_QT.TdP.risk_Lable[Predicted.risk.results_C$Pred.TdP.risk.5Pheno > Threshold] <- "Positive"
+Predicted.risk.results_C$Predicted_QT.TdP.risk_Lable[Predicted.risk.results_C$Pred.TdP.risk.5Pheno < Threshold] <- "Negative"
+Predicted.risk.results_C$Predicted_QT.TdP.risk_Lable <- factor(Predicted.risk.results_C$Predicted_QT.TdP.risk_Lable)
+
+Predicted.risk.results_C$Ture.False.Lable[which(Predicted.risk.results_C$QT.TdP.risk_Lable == Predicted.risk.results_C$Predicted_QT.TdP.risk_Lable)] <- "Ture"
+Predicted.risk.results_C$Ture.False.Lable[which(Predicted.risk.results_C$QT.TdP.risk_Lable != Predicted.risk.results_C$Predicted_QT.TdP.risk_Lable)] <- "False"
+
+TP <- sum(Predicted.risk.results_C$Ture.False.Lable == "Ture" & Predicted.risk.results_C$Predicted_QT.TdP.risk_Lable == "Positive")
+TN <- sum(Predicted.risk.results_C$Ture.False.Lable == "Ture" & Predicted.risk.results_C$Predicted_QT.TdP.risk_Lable == "Negative")
+FP <- sum(Predicted.risk.results_C$Ture.False.Lable == "False" & Predicted.risk.results_C$Predicted_QT.TdP.risk_Lable == "Positive")
+FN <- sum(Predicted.risk.results_C$Ture.False.Lable == "False" & Predicted.risk.results_C$Predicted_QT.TdP.risk_Lable == "Negative")
+
+Accuracy <- (TP + TN)/(TP + TN + FP + FN)
+Sensitivity <- TP / (TP + FN)
+Specificity <- TN / (TN + FP)
+
+Fig.RISK <-
+ggplot(Predicted.risk.results_C, aes(x=reorder(Chemical.Name, -order), y=Pred.TdP.risk.5Pheno, color = QT.TdP.risk_Lable, shape = Ture.False.Lable)) +
+  geom_point(stat = "identity", size = 2.5) +
+  geom_hline(yintercept = Threshold, color = "red", linetype = 2) +
+  #annotate(geom="text", x=50, y=0.7, label=paste("Accuracy = ", round(Accuracy, digits = 3), sep="")) + 
+  #annotate(geom="text", x=48, y=0.7, label=paste("Sensitivity = ", round(Sensitivity, digits = 3), sep="")) + 
+  #annotate(geom="text", x=46, y=0.7, label=paste("Specificity = ", round(Specificity, digits = 3), sep="")) +
+  scale_y_continuous(breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), limits = c(0, 1))+
+  scale_color_manual(values = c("#5964FF", "#FF5964"))+
+  scale_shape_manual(values = c(1, 16)) + 
+  labs(x = "Chemical", 
+       y= "Probability of positive TdP risk")+
+  ggtitle("D") +
+  coord_flip()+
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=10),
+        title = element_text(color = "black", face = "bold", size=10),
+        panel.grid = element_blank(),
+        panel.grid.major.y = element_line(color = "gray", linetype = 3),
+        panel.border = element_rect(size = 1.2),
+        legend.title = element_text(color = "black", face = "bold"),
+        legend.position = "none", #c(0.85, 0.8)
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold", size=10),
+        axis.text.y = element_text(color = "black", face = "bold"),
+        axis.text.x = element_text(color = "black", face = "bold"),
+        plot.title = element_text(face="bold", size=15))
+
+tiff(width = 10, height = 10, "plots/Figure 3.tiff", units = "in", res=400)
+((Fig.MODEL / Fig.SSA / Fig.ROC) | Fig.RISK) + plot_layout(widths = c(1/2, 1/2))
+dev.off()
+
+
+# --------------- Internal cross-validation --------------- 
+BMD50_drug_logit_data_C_croval   <- Dataset.C[which(Dataset.C$Drug_lable == "Drug"), ]
+BMD50_drug_logit_data_C_croval$QT.TdP_Positive_k <- as.factor(BMD50_drug_logit_data_C_croval$QT.TdP_Positive_k)
+BMD50_drug_logit_data_C_croval$QT.TdP_Positive_k_c <- as.factor(BMD50_drug_logit_data_C_croval$QT.TdP_Positive_k_c)
+
+Predicted.risk.results_C_croval <- BMD50_drug_logit_data_C_croval[, c("Chemical.Name", "QT.TdP_Positive_k", "QT.TdP_Positive_k_c")]
+
+SSA.crossvalidation.data_C <- data.frame(Chemical = NA,
+                                       Plot.num = NA,
+                                       Thresholds = NA,
+                                       Sensitivity = NA,
+                                       False.positive.rate = NA,
+                                       Specificity = NA,
+                                       Accuracy = NA,
+                                       Gmean = NA)
+
+
+for(i in 1:56){
+  
+  logit.data.removeonedrug <- BMD50_drug_logit_data_C_croval[-i, ]
+  
+  risk.model <- glm(QT.TdP_Positive_k_c ~ log10(Peak_Frequency_up) + log10(Peak_Frequency_dn) + log10(Peak_Decay_Rise_Ratio_up) + 
+                      log10(Peak_Frequency_zero) + log10(Total_Cells_zero), 
+                    data = logit.data.removeonedrug, family = binomial(link = "logit"))
+  
+  logit.data.removeonedrug$Pred.TdP.risk.5Pheno <- risk.model$fitted.values
+  
+  # Predict removed chemical risk
+  Predicted.risk.results_C_croval$Predicted_QT.TdP.risk[i] <- predict(risk.model, BMD50_drug_logit_data_C_croval[i, c(5:9)], type = c("response"), se.fit = TRUE)$fit
+  Predicted.risk.results_C_croval$Predicted_QT.TdP.risk.se[i] <- predict(risk.model, BMD50_drug_logit_data_C_croval[i, c(5:9)], type = c("response"), se.fit = TRUE)$se.fit
+  
+  # ROC curve
+  temp.pred.risk.list <- c(logit.data.removeonedrug$Pred.TdP.risk.5Pheno)
+  temp.obse.risk.lable.list <- c(logit.data.removeonedrug$QT.TdP_Positive_k_c)
+  
+  roc.curve <- roc.curve(temp.obse.risk.lable.list, temp.pred.risk.list, 
+                         col = "#5964FF", lwd=3, main = Predicted.risk.results_C_croval$Chemical.Name[i], xlab = "", ylab = "")
+  text(0.7, 0.2, paste("AUC = ", round(roc.curve$auc, digits = 3)))
+  
+  # Grab AUC
+  Predicted.risk.results_C_croval$AUC[i] <- round(roc.curve$auc, digits = 3)
+  
+  # SSA.relationship
+  tep.ssa.data <- data.frame(Chemical = rep(Predicted.risk.results_C_croval$Chemical.Name[i], 50),
+                             Plot.num = rep(i, 50),
+                             Thresholds = roc.curve(temp.obse.risk.lable.list, temp.pred.risk.list, 
+                                                    plotit = F)$thresholds[2:51],
+                             Sensitivity = roc.curve(temp.obse.risk.lable.list, temp.pred.risk.list, 
+                                                     plotit = F)$true.positive.rate[2:51],
+                             False.positive.rate = roc.curve(temp.obse.risk.lable.list, temp.pred.risk.list, 
+                                                             plotit = F)$false.positive.rate[2:51])
+  tep.ssa.data$Specificity <- 1 - tep.ssa.data$False.positive.rate
+  tep.ssa.data$Accuracy <- (tep.ssa.data$Sensitivity * 18 + tep.ssa.data$Specificity * 38)/56
+  tep.ssa.data$Gmean <- (tep.ssa.data$Sensitivity * tep.ssa.data$Specificity)^(1/2)
+  SSA.crossvalidation.data_C <- rbind(SSA.crossvalidation.data_C, tep.ssa.data)
+  
+  # Grab Potential risk threshold
+  Predicted.risk.results_C_croval$Potential.threshold[i] <- tep.ssa.data$Thresholds[which.max(tep.ssa.data$Gmean)]
+  Predicted.risk.results_C_croval$Accuracy[i] <- tep.ssa.data$Accuracy[which.max(tep.ssa.data$Gmean)]
+  Predicted.risk.results_C_croval$Sensitivity[i] <- tep.ssa.data$Sensitivity[which.max(tep.ssa.data$Gmean)]
+  Predicted.risk.results_C_croval$Specificity[i] <- tep.ssa.data$Specificity[which.max(tep.ssa.data$Gmean)]
+  
+  
+  
+  print(Predicted.risk.results_C_croval$Chemical.Name[i])
+  
+}
+
+mean(Predicted.risk.results_C_croval$AUC)
+sd(Predicted.risk.results_C_croval$AUC)
+
+#QuaMedian_50percentile_POD(quants.6_med)_che138_onedonor_1rep: 0.9004643, 0.006747294
+#QuaMedian_50percentile_POD(quants.6_med)_che138_onedonor_5rep: 0.833875, 0.009295282
+#QuaMedian_50percentile_POD(quants.6_med)_138che_5ind: 0.8937857, 0.01080356
+
+# Bar Chart and point chart
+Predicted.risk.results_C_croval$QT.TdP.risk_Lable[Predicted.risk.results_C_croval$QT.TdP_Positive_k_c == "0"] <- "Negative"
+Predicted.risk.results_C_croval$QT.TdP.risk_Lable[Predicted.risk.results_C_croval$QT.TdP_Positive_k_c == "1"] <- "Positive"
+Predicted.risk.results_C_croval$QT.TdP.risk_Lable <- factor(Predicted.risk.results_C_croval$QT.TdP.risk_Lable)
+Predicted.risk.results_C_croval$order <- (as.numeric(Predicted.risk.results_C_croval$QT.TdP_Positive_k_c) * 10) + Predicted.risk.results_C_croval$Predicted_QT.TdP.risk
+
+# Predicted classification
+Predicted.risk.results_C_croval$Predicted_QT.TdP.risk_Lable[Predicted.risk.results_C_croval$Predicted_QT.TdP.risk > Predicted.risk.results_C_croval$Potential.threshold] <- "Positive"
+Predicted.risk.results_C_croval$Predicted_QT.TdP.risk_Lable[Predicted.risk.results_C_croval$Predicted_QT.TdP.risk < Predicted.risk.results_C_croval$Potential.threshold] <- "Negative"
+Predicted.risk.results_C_croval$Predicted_QT.TdP.risk_Lable <- factor(Predicted.risk.results_C_croval$Predicted_QT.TdP.risk_Lable)
+
+Predicted.risk.results_C_croval$Ture.False.Lable[which(Predicted.risk.results_C_croval$QT.TdP.risk_Lable == Predicted.risk.results_C_croval$Predicted_QT.TdP.risk_Lable)] <- "Ture"
+Predicted.risk.results_C_croval$Ture.False.Lable[which(Predicted.risk.results_C_croval$QT.TdP.risk_Lable != Predicted.risk.results_C_croval$Predicted_QT.TdP.risk_Lable)] <- "False"
+
+TP <- sum(Predicted.risk.results_C_croval$Ture.False.Lable == "Ture" & Predicted.risk.results_C_croval$Predicted_QT.TdP.risk_Lable == "Positive")
+TN <- sum(Predicted.risk.results_C_croval$Ture.False.Lable == "Ture" & Predicted.risk.results_C_croval$Predicted_QT.TdP.risk_Lable == "Negative")
+FP <- sum(Predicted.risk.results_C_croval$Ture.False.Lable == "False" & Predicted.risk.results_C_croval$Predicted_QT.TdP.risk_Lable == "Positive")
+FN <- sum(Predicted.risk.results_C_croval$Ture.False.Lable == "False" & Predicted.risk.results_C_croval$Predicted_QT.TdP.risk_Lable == "Negative")
+
+Accuracy <- (TP + TN)/(TP + TN + FP + FN)
+Sensitivity <- TP / (TP + FN)
+Specificity <- TN / (TN + FP)
+
+
+Fig.RISK.croval.ModelC <-
+ggplot(Predicted.risk.results_C_croval, aes(x=reorder(Chemical.Name, -order), y=Predicted_QT.TdP.risk, color = QT.TdP.risk_Lable, shape = Ture.False.Lable)) +
+  geom_rect(xmin = -Inf, xmax = Inf, 
+            ymin = range(Predicted.risk.results_C_croval$Potential.threshold)[1], 
+            ymax = range(Predicted.risk.results_C_croval$Potential.threshold)[2], fill = "#FFF3C1", color = "#FFF3C1") + 
+  geom_point(stat = "identity", size = 2.5) +
+  geom_hline(yintercept = median(Predicted.risk.results_C_croval$Potential.threshold), color = "red", linetype = 2) +
+  annotate(geom="text", x=50, y=0.7, label=paste("Accuracy = ", round(Accuracy, digits = 3), 
+                                                  " (", round(range(Predicted.risk.results_C_croval$Accuracy)[1], digits = 3), " - ",
+                                                  round(range(Predicted.risk.results_C_croval$Accuracy)[2], digits = 3), ")", sep="")) + 
+  annotate(geom="text", x=48, y=0.7, label=paste("Sensitivity = ", round(Sensitivity, digits = 3), 
+                                                   " (", round(range(Predicted.risk.results_C_croval$Sensitivity)[1], digits = 3), " - ",
+                                                   round(range(Predicted.risk.results_C_croval$Sensitivity)[2], digits = 3), ")", sep="")) + 
+  annotate(geom="text", x=46, y=0.7, label=paste("Specificity = ", round(Specificity, digits = 3), 
+                                                  " (", round(range(Predicted.risk.results_C_croval$Specificity)[1], digits = 3), " - ",
+                                                  round(range(Predicted.risk.results_C_croval$Specificity)[2], digits = 3), ")", sep="")) + 
+  annotate(geom="text", x=44, y=0.7, label=paste("Threshold = ", round(median(Predicted.risk.results_C_croval$Potential.threshold), digits = 3), 
+                                                   " (", round(range(Predicted.risk.results_C_croval$Potential.threshold)[1], digits = 3), " - ",
+                                                   round(range(Predicted.risk.results_C_croval$Potential.threshold)[2], digits = 3), ")", sep="")) + 
+  annotate(geom="text", x=42, y=0.7, label=paste("AUC of ROC = ", round(range(Predicted.risk.results_C_croval$AUC)[1], digits = 3), " - ",
+                                                  round(range(Predicted.risk.results_C_croval$AUC)[2], digits = 3), sep="")) +
+  scale_y_continuous(breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), limits = c(0, 1))+
+  scale_color_manual(values = c("#5964FF", "#FF5964"))+
+  scale_shape_manual(values = c(1, 16)) + 
+  ggtitle("C. Model C") +
+  labs(x = "Chemical", 
+       y= "Probability of positive TdP risk")+
+  coord_flip()+
+  labs(x = "Chemical", 
+       y= "Probability of positive TdP risk")+
+  coord_flip()+
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=10),
+        title = element_text(color = "black", face = "bold", size=12),
+        panel.grid = element_blank(),
+        panel.grid.major.y = element_line(color = "gray", linetype = 3),
+        panel.border = element_rect(size = 1.2),
+        legend.title = element_text(color = "black", face = "bold"),
+        legend.position = "none", #c(0.85, 0.8)
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold", size=12),
+        axis.text.y = element_text(color = "black", face = "bold"),
+        axis.text.x = element_text(color = "black", face = "bold"),
+        plot.title = element_text(face="bold", size=15))
+
+
+# --------------- External validation ---------------
+Dataset.C_vali <- read.csv("data/POD_Dataset C_validated.csv")
+Dataset.C_vali$Peak_Frequency_up[Dataset.C_vali$Peak_Frequency_up > 300] <- 300
+Dataset.C_vali$Peak_Frequency_dn[Dataset.C_vali$Peak_Frequency_dn > 300] <- 300
+Dataset.C_vali$Peak_Decay_Rise_Ratio_up[Dataset.C_vali$Peak_Decay_Rise_Ratio_up > 300] <- 300
+Dataset.C_vali$Peak_Frequency_zero[Dataset.C_vali$Peak_Frequency_zero > 300] <- 300
+Dataset.C_vali$Total_Cells_zero[Dataset.C_vali$Total_Cells_zero > 300] <- 300
+
+Dataset.C_vali$QT.TdP_Positive_k_c <- NA
+Dataset.C_vali$QT.TdP_Positive_k_c[c(which(Dataset.C_vali$Risk.lable == "Known" | 
+                                                     Dataset.C_vali$Risk.lable == "Conditional" | 
+                                                     Dataset.C_vali$Risk.lable == "FDA (High)"))] <- "1"
+Dataset.C_vali$QT.TdP_Positive_k_c[which(Dataset.C_vali$Risk.lable == "Possible" | 
+                                                   Dataset.C_vali$Risk.lable == "Drug has a Special Risk for patients with congenital Long QT")] <- "0"
+Dataset.C_vali$QT.TdP_Positive_k_c[which(Dataset.C_vali$Risk.lable == "")] <- "0"
+sum(Dataset.C_vali$QT.TdP_Positive_k_c == "1") #check = 28
+Dataset.C_vali$QT.TdP_Positive_k_c <- as.factor(Dataset.C_vali$QT.TdP_Positive_k_c)
+
+BMD50_drug_logit_data_C_extval   <- Dataset.C_vali[which(Dataset.C_vali$Chemical.Class == "Pharmaceutical" | 
+                                                                Dataset.C_vali$Chemical.Class == "CiPA pharmaceutical"), ]
+
+
+# Predicted risk
+BMD50_drug_logit_data_C_extval$Pred.TdP.risk.5Pheno <- predict(BMD50_5pheno_TdP.risk.model_C, BMD50_drug_logit_data_C_extval, type = "response")
+
+Predicted.risk.results_C_extval <- BMD50_drug_logit_data_C_extval[, c("Chemical.Name", "QT.TdP_Positive_k_c", "Pred.TdP.risk.5Pheno")]
+Predicted.risk.results_C_extval$QT.TdP_Positive_k_c <- factor(Predicted.risk.results_C_extval$QT.TdP_Positive_k_c)
+Predicted.risk.results_C_extval$QT.TdP.risk_Lable[Predicted.risk.results_C_extval$QT.TdP_Positive_k_c == "0"] <- "Negative"
+Predicted.risk.results_C_extval$QT.TdP.risk_Lable[Predicted.risk.results_C_extval$QT.TdP_Positive_k_c == "1"] <- "Positive"
+Predicted.risk.results_C_extval$QT.TdP.risk_Lable <- factor(Predicted.risk.results_C_extval$QT.TdP.risk_Lable)
+Predicted.risk.results_C_extval$order <- (as.numeric(Predicted.risk.results_C_extval$QT.TdP_Positive_k_c) * 10) + Predicted.risk.results_C_extval$Pred.TdP.risk.5Pheno
+
+# Predicted classfication
+Predicted.risk.results_C_extval$Predicted_QT.TdP.risk_Lable[Predicted.risk.results_C_extval$Pred.TdP.risk.5Pheno > Threshold] <- "Positive"
+Predicted.risk.results_C_extval$Predicted_QT.TdP.risk_Lable[Predicted.risk.results_C_extval$Pred.TdP.risk.5Pheno < Threshold] <- "Negative"
+Predicted.risk.results_C_extval$Predicted_QT.TdP.risk_Lable <- factor(Predicted.risk.results_C_extval$Predicted_QT.TdP.risk_Lable)
+Predicted.risk.results_C_extval$Ture.False.Lable <- NA
+Predicted.risk.results_C_extval$Ture.False.Lable[which(Predicted.risk.results_C_extval$QT.TdP.risk_Lable == Predicted.risk.results_C_extval$Predicted_QT.TdP.risk_Lable)] <- "Ture"
+Predicted.risk.results_C_extval$Ture.False.Lable[which(Predicted.risk.results_C_extval$QT.TdP.risk_Lable != Predicted.risk.results_C_extval$Predicted_QT.TdP.risk_Lable)] <- "False"
+
+TP <- sum(Predicted.risk.results_C_extval$Ture.False.Lable == "Ture" & Predicted.risk.results_C_extval$Predicted_QT.TdP.risk_Lable == "Positive")
+TN <- sum(Predicted.risk.results_C_extval$Ture.False.Lable == "Ture" & Predicted.risk.results_C_extval$Predicted_QT.TdP.risk_Lable == "Negative")
+FP <- sum(Predicted.risk.results_C_extval$Ture.False.Lable == "False" & Predicted.risk.results_C_extval$Predicted_QT.TdP.risk_Lable == "Positive")
+FN <- sum(Predicted.risk.results_C_extval$Ture.False.Lable == "False" & Predicted.risk.results_C_extval$Predicted_QT.TdP.risk_Lable == "Negative")
+
+Accuracy <- (TP + TN)/(TP + TN + FP + FN)
+Sensitivity <- TP / (TP + FN)
+Specificity <- TN / (TN + FP)
+
+Fig.RISK.extval.ModelC.main <- 
+ggplot(Predicted.risk.results_C_extval, aes(x=reorder(Chemical.Name, -order), y=Pred.TdP.risk.5Pheno, color = QT.TdP.risk_Lable, shape = Ture.False.Lable)) +
+  geom_point(stat = "identity", size = 3.5) +
+  geom_hline(yintercept = Threshold, color = "red", linetype = 2) +
+  #annotate(geom="text", x=120, y=0.8, label=paste("Accuracy = ", round(Accuracy, digits = 3), sep="")) + 
+  #annotate(geom="text", x=120, y=0.7, label=paste("Sensitivity = ", round(Sensitivity, digits = 3), sep="")) + 
+  #annotate(geom="text", x=120, y=0.6, label=paste("Specificity = ", round(Specificity, digits = 3), sep="")) + 
+  scale_y_continuous(breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), limits = c(0, 1))+
+  scale_color_manual(values = c("#5964FF", "#FF5964"))+
+  scale_shape_manual(values = c(1, 16)) + 
+  labs(x = "Chemical", 
+       y= "Probability of positive TdP risk")+
+  ggtitle("C. Model C") +
+  #coord_flip()+
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000"),
+        panel.grid = element_blank(),
+        panel.grid.major.x = element_line(color = "gray", linetype = 3),
+        panel.border = element_rect(size = 1.2),
+        legend.title = element_text(color = "black", face = "bold"),
+        legend.position = "none", #c(0.85, 0.8)
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold", size=12),
+        axis.text.y = element_text(color = "black", face = "bold"),
+        axis.text.x = element_text(color = "black", face = "bold", angle = 65, hjust=1),
+        plot.title = element_text(face="bold", size=15))
+
+# ROC plot
+roc.curve <- roc(BMD50_drug_logit_data_C_extval$QT.TdP_Positive_k_c, BMD50_drug_logit_data_C_extval$Pred.TdP.risk.5Pheno)
+auc <- round(auc(BMD50_drug_logit_data_C_extval$QT.TdP_Positive_k_c, BMD50_drug_logit_data_C_extval$Pred.TdP.risk.5Pheno),3)
+Fig.ROC.extval.ModelC <- 
+ggroc(roc.curve, colour = "#5964FF", size = 1.3) +
+  geom_abline(slope=1, intercept=1) + 
+  annotate(geom="point", x = Specificity, y = Sensitivity, color = "red", size = 2.5) + 
+  annotate(geom="text", x = 0.25, y = 0.25, label=paste0("AUC = ", auc, sep="")) +
+  labs(x="Specificity", y="Sensitivity") +
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=8, hjust=0.5, vjust=0.5),
+        panel.grid = element_blank(),
+        legend.position = c(0.6, 0.20),
+        legend.text = element_text(color = "black", face = "bold"),
+        legend.background = element_rect(fill = "#00000000"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(size = 1.2),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold"),
+        axis.text = element_text(color = "black", face = "bold"),
+        strip.text = element_text(size=10, face = "bold"))
+
+Fig.RISK.extval.ModelC <-
+ggdraw() +
+  draw_plot(Fig.RISK.extval.ModelC.main) +
+  draw_plot(Fig.ROC.extval.ModelC, x = 0.8, y = .65, width = .15, height = .28)
+
+```
+
+
+```{r Supplementary plots}
+tiff(width = 20, height = 9, "plots/Figure S3_CroVal.tiff", units = "in", res=400)
+(Fig.RISK.croval.ModelA + Fig.RISK.croval.ModelB + Fig.RISK.croval.ModelC) + plot_layout(widths = c(1/3, 1/3, 1/3))
+dev.off()
+
+tiff(width = 20, height = 21, "plots/Figure S4_ExtVal.tiff", units = "in", res=300)
+(Fig.RISK.extval.ModelA + Fig.RISK.extval.ModelB + Fig.RISK.extval.ModelC) + plot_layout(heights = c(1/3, 1/3, 1/3))
+dev.off()
+```
+
+
+```{r Summary Model selection}
+sen_spe.dat <- read.csv("data/Summary_sen_spe.csv")
+roc.dat <- read.csv("data/Summary_ROC.csv")
+
+sen_spe.dat$type <- factor(sen_spe.dat$type, c("Predict risks of drugs in Dataset I", "Internal cross-validation", "External validation"))
+roc.dat$type <- factor(roc.dat$type, c("Predict risks of drugs in Dataset I", "Internal cross-validation", "External validation"))
+
+sen_spe.dat$model <- factor(sen_spe.dat$model, c("Blinova et al. 2018", "A", "B", "C"))
+roc.dat$model <- factor(roc.dat$model, c("Blinova et al. 2018", "A", "B", "C"))
+f.1 <- 
+ggplot(data=sen_spe.dat[which(sen_spe.dat$index == "Sensitivity"),], aes(x=model, y=value, fill=model)) +
+  geom_bar(stat="identity", width=0.5) +
+  geom_text(aes(label = round(value, digits = 2)), vjust = -0.5)+
+  scale_y_continuous(limits = c(0, 1))+
+  facet_wrap(~type)+
+  scale_x_discrete(labels=c('Blinova et al. \n 2018', 'A', 'B', 'C')) + 
+  scale_fill_manual(values = c("#FF6000", "#2ADBB4","#2A88DB", "#2A2DDB"))+
+  theme_bw() + 
+  xlab("") +
+  ylab("")+
+  ggtitle("Sensitivity")+
+  theme(text=element_text(family="sans", face="plain", color="#000000", hjust=0.5, vjust=0.5), 
+        legend.position = "none",
+        plot.title = element_text(size = 15, color = "black", face = "bold"),
+        plot.margin = margin(0, 0, 1, 0),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(size = 12,color = "black", face = "bold"),
+        axis.text = element_text(size = 10,color = "black", face = "bold"),
+        strip.text.x = element_text(size = 12, color = "black", face = "bold"))
+f.2 <-
+ggplot(data=sen_spe.dat[which(sen_spe.dat$index == "Specificity"),], aes(x=model, y=value, fill=model)) +
+  geom_bar(stat="identity", width=0.5) +
+  geom_text(aes(label = round(value, digits = 2)), vjust = -0.5)+
+  scale_y_continuous(limits = c(0, 1.05))+
+  facet_wrap(~type)+
+  scale_x_discrete(labels=c('Blinova et al. \n 2018', 'A', 'B', 'C')) + 
+  scale_fill_manual(values = c("#FF6000", "#2ADBB4","#2A88DB", "#2A2DDB"))+
+  theme_bw() + 
+  xlab("") +
+  ylab("Value")+
+  ggtitle("Specificity")+
+  theme(text=element_text(family="sans", face="plain", color="#000000", hjust=0.5, vjust=0.5), 
+        legend.position = "none",
+        plot.title = element_text(size = 15, color = "black", face = "bold"),
+        plot.margin = margin(0, 0, 1, 0),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(size = 12,color = "black", face = "bold"),
+        axis.text = element_text(size = 10,color = "black", face = "bold"),
+        strip.text.x = element_text(size = 12, color = "black", face = "bold"))
+
+f.3 <- 
+ggplot(data=roc.dat, aes(x=model, y=med, fill=model)) +
+  geom_bar( stat="identity", width=0.5) +
+  geom_errorbar(aes(x=model, ymin=med-sd, ymax=med+sd), width=0.2, colour="black") +
+  geom_text(aes(label = round(med, digits = 2)), vjust = -0.5)+
+  #geom_point(aes(x=model, y=med, color=model), size=2.5) +
+  #geom_point(aes(x=model, y=min, color=model), size=2.5) +
+  #geom_point(aes(x=model, y=max, color=model), size=2.5) +
+  #geom_segment(aes(x=model, xend=model, y=0.6, yend=med, color=model), size=1) +
+  #geom_segment(aes(x=model, xend=model, y=min, yend=max, color=model), size=1) +
+  scale_y_continuous(limits = c(0, 1))+
+  scale_x_discrete(labels=c('Blinova et al. \n 2018', 'A', 'B', 'C')) + 
+  facet_wrap(~type)+
+  scale_fill_manual(values = c("#FF6000", "#2ADBB4","#2A88DB", "#2A2DDB"))+
+  theme_bw() + 
+  xlab("Model") +
+  ylab("")+
+  ggtitle("AUC of ROC")+
+  theme(text=element_text(family="sans", face="plain", color="#000000", hjust=0.5, vjust=0.5), 
+        legend.position = "none",
+        plot.title = element_text(size = 15, color = "black", face = "bold"),
+        plot.margin = margin(0, 0, 1, 0),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(size = 12,color = "black", face = "bold"),
+        axis.text = element_text(size = 10,color = "black", face = "bold"),
+        strip.text.x = element_text(size = 12, color = "black", face = "bold"))
+
+tiff(width = 12, height = 10.3, "plots/Figure 4.tiff", units = "in", res=300)
+f.1 + f.2 + f.3 + plot_layout(height = c(1/3, 1/3, 1/3))
+dev.off()
+```
+
+
+```{r Predict TdP risk of environmental chemical (bar chart)}
+Threshold <- 0.270298
+Envir.Dataset.C <- Dataset.C[-c(which(Dataset.C$Drug_lable == "Drug")), ]
+Envir.Dataset.C$Pred.TdP.risk.5Pheno <- predict(BMD50_5pheno_TdP.risk.model_C, Envir.Dataset.C, type = "response")
+Envir.Dataset.C$Predicted_QT.TdP.risk_Lable[Envir.Dataset.C$Pred.TdP.risk.5Pheno > Threshold] <- "Positive"
+Envir.Dataset.C$Predicted_QT.TdP.risk_Lable[Envir.Dataset.C$Pred.TdP.risk.5Pheno < Threshold] <- "Negative"
+
+Envir.Dataset.C_vali <- Dataset.C_vali[-c(which(Dataset.C_vali$Chemical.Class == "Pharmaceutical" | 
+                                                    Dataset.C_vali$Chemical.Class == "CiPA pharmaceutical"), which(is.na(Dataset.C_vali$Chemical.Class))), ]
+Envir.Dataset.C_vali$Pred.TdP.risk.5Pheno <- predict(BMD50_5pheno_TdP.risk.model_C, Envir.Dataset.C_vali, type = "response")
+Envir.Dataset.C_vali$Predicted_QT.TdP.risk_Lable[Envir.Dataset.C_vali$Pred.TdP.risk.5Pheno > Threshold] <- "Positive"
+Envir.Dataset.C_vali$Predicted_QT.TdP.risk_Lable[Envir.Dataset.C_vali$Pred.TdP.risk.5Pheno < Threshold] <- "Negative"
+
+counts <- ddply(Envir.Dataset.C, .(Envir.Dataset.C$Chemical.Class, Envir.Dataset.C$Predicted_QT.TdP.risk_Lable), nrow)
+names(counts) <- c("Class", "Risk", "Count")
+counts$Risk <- factor(counts$Risk, levels = c("Positive", "Negative"))
+
+Fig.RISK.envi.DAT1.bar <- 
+  ggplot(counts, aes(fill=Risk, y=Count, x=Class)) + 
+  geom_bar(position="stack", stat="identity") +
+  ggtitle("A. Dataset I") +
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000"),
+        panel.grid = element_blank(),
+        panel.border = element_rect(size = 1.2),
+        #plot.margin = margin(0, 1, 0, 3),
+        legend.title = element_text(color = "black", face = "bold", size=10),
+        legend.position = "none", 
+        legend.text = element_text(color = "black", face = "bold", size=8),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold", size=12),
+        axis.text.y = element_text(color = "black", face = "bold", size=10),
+        axis.text.x = element_text(color = "black", face = "bold", angle = 55, hjust=1, size=10),
+        plot.title = element_text(face="bold", size=15))
+
+counts <- ddply(Envir.Dataset.C_vali, .(Envir.Dataset.C_vali$Chemical.Class, Envir.Dataset.C_vali$Predicted_QT.TdP.risk_Lable), nrow)
+names(counts) <- c("Class", "Risk", "Count")
+counts$Risk <- factor(counts$Risk, levels = c("Positive", "Negative"))
+
+Fig.RISK.envi.DAT2.bar <- 
+  ggplot(counts, aes(fill=Risk, y=Count, x=Class)) + 
+  geom_bar(position="stack", stat="identity") +
+  ggtitle("B. Dataset II") +
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000"),
+        panel.grid = element_blank(),
+        panel.border = element_rect(size = 1.2),
+        #plot.margin = margin(0, 1, 0, 3),
+        legend.title = element_text(color = "black", face = "bold", size=10),
+        legend.position = c(0.9, 0.8), 
+        legend.text = element_text(color = "black", face = "bold", size=8),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold", size=12),
+        axis.text.y = element_text(color = "black", face = "bold", size=12),
+        axis.text.x = element_text(color = "black", face = "bold", angle = 55, hjust=1, size=10),
+        plot.title = element_text(face="bold", size=15))
+
+tiff(width = 13, height = 5.5, "plots/Figure 5.tiff", units = "in", res=300)
+Fig.RISK.envi.DAT1.bar + Fig.RISK.envi.DAT2.bar + plot_layout(widths = c(1/2, 1/2))
+dev.off()
+```
+
+
+```{r Predict TdP risk and MOE of environmental chemical}
+# -------- Traning dataset prepare ---------
+#Envir.Dataset.C_Positive <- Envir.Dataset.C[c(which(Envir.Dataset.C$Predicted_QT.TdP.risk_Lable == "Positive")), ]
+#for(i in 1:5){
+#  Envir.Dataset.C_Positive$Css[i] <- try(calc_css(chem.cas = Envir.Dataset.C_Positive$Chemical.CAS[i],output.units = "uM")[[1]])
+#  print(i)
+#}
+#Envir.Dataset.C_Positive$Css <- as.numeric(Envir.Dataset.C_Positive$Css)
+#Envir.Dataset.C_Positive <- Envir.Dataset.C_Positive[-c(which(is.na(Envir.Dataset.C_Positive$Css))), ]
+#write.csv(Envir.Dataset.C_Positive, "data/Envir.Dataset.C_Positive.csv")
+
+# -------- Validation dataset prepare ---------
+#Envir.Dataset.C_vali_Positive <- Envir.Dataset.C_vali[c(which(Envir.Dataset.C_vali$Predicted_QT.TdP.risk_Lable == "Positive")), ]
+#for(i in 1:155){
+#  Envir.Dataset.C_vali_Positive$Css[i] <- try(calc_css(chem.cas = Envir.Dataset.C_vali_Positive$Chemical.CAS[i],output.units = "uM")[[1]])
+#  print(i)
+#}
+#Envir.Dataset.C_vali_Positive$Css <- as.numeric(Envir.Dataset.C_vali_Positive$Css)
+#Envir.Dataset.C_vali_Positive <- Envir.Dataset.C_vali_Positive[-c(which(is.na(Envir.Dataset.C_vali_Positive$Css))), ]
+#write.csv(Envir.Dataset.C_vali_Positive, "data/Envir.Dataset.C_vali_Positive.csv")
+
+# -------- Traning dataset ---------
+Envir.Dataset.C_Positive <- read.csv("data/Envir.Dataset.C_Positive.csv")
+Envir.Dataset.C_Positive$minPOD <- apply(Envir.Dataset.C_Positive[, c("Peak_Frequency_up", "Peak_Frequency_dn", "Peak_Decay_Rise_Ratio_up",
+                                 "Peak_Frequency_zero", "Total_Cells_zero")], 1, FUN = min, na.rm = TRUE)
+
+for(i in 1:3){
+  if (Envir.Dataset.C_Positive$minPOD[i] == Envir.Dataset.C_Positive$Peak_Frequency_up[i]){
+    Envir.Dataset.C_Positive$minPOD_endpoint[i] <- "Peak_Frequency_up"}
+  
+  if (Envir.Dataset.C_Positive$minPOD[i] == Envir.Dataset.C_Positive$Peak_Frequency_dn[i]){
+    Envir.Dataset.C_Positive$minPOD_endpoint[i] <- "Peak_Frequency_dn"}
+  
+  if (Envir.Dataset.C_Positive$minPOD[i] == Envir.Dataset.C_Positive$Peak_Decay_Rise_Ratio_up[i]){
+    Envir.Dataset.C_Positive$minPOD_endpoint[i] <- "Peak_Decay_Rise_Ratio_up"}
+  
+  if (Envir.Dataset.C_Positive$minPOD[i] == Envir.Dataset.C_Positive$Peak_Frequency_zero[i]){
+    Envir.Dataset.C_Positive$minPOD_endpoint[i] <- "Peak_Frequency_zero"}
+  
+  if (Envir.Dataset.C_Positive$minPOD[i] == Envir.Dataset.C_Positive$Total_Cells_zero[i]){
+    Envir.Dataset.C_Positive$minPOD_endpoint[i] <- "Total_Cells_zero"}
+  
+}
+
+Envir.Dataset.C_Positive$MOE_med <- Envir.Dataset.C_Positive$minPOD/(Envir.Dataset.C_Positive$Css*Envir.Dataset.C_Positive$seem3)
+Envir.Dataset.C_Positive$MOE_95 <- Envir.Dataset.C_Positive$minPOD/(Envir.Dataset.C_Positive$Css*Envir.Dataset.C_Positive$seem3.u95)
+Envir.Dataset.C_Positive$Chemical.Name <- paste(Envir.Dataset.C_Positive$Chemical.Name, "*", sep = "")
+Envir.Dataset.C_Positive$Dataset <- "I"
+
+# -------- Validated dataset ---------
+Envir.Dataset.C_vali_Positive <- read.csv("data/Envir.Dataset.C_vali_Positive.csv")
+Envir.Dataset.C_vali_Positive <- Envir.Dataset.C_vali_Positive[-c(which(is.na(Envir.Dataset.C_vali_Positive$seem3))), ]
+Envir.Dataset.C_vali_Positive$minPOD <- apply(Envir.Dataset.C_vali_Positive[, c("Peak_Frequency_up", "Peak_Frequency_dn", "Peak_Decay_Rise_Ratio_up",
+                                 "Peak_Frequency_zero", "Total_Cells_zero")], 1, FUN = min, na.rm = TRUE)
+
+for(i in 1:102){
+  if (Envir.Dataset.C_vali_Positive$minPOD[i] == Envir.Dataset.C_vali_Positive$Peak_Frequency_up[i]){
+    Envir.Dataset.C_vali_Positive$minPOD_endpoint[i] <- "Peak_Frequency_up"}
+  
+  if (Envir.Dataset.C_vali_Positive$minPOD[i] == Envir.Dataset.C_vali_Positive$Peak_Frequency_dn[i]){
+    Envir.Dataset.C_vali_Positive$minPOD_endpoint[i] <- "Peak_Frequency_dn"}
+  
+  if (Envir.Dataset.C_vali_Positive$minPOD[i] == Envir.Dataset.C_vali_Positive$Peak_Decay_Rise_Ratio_up[i]){
+    Envir.Dataset.C_vali_Positive$minPOD_endpoint[i] <- "Peak_Decay_Rise_Ratio_up"}
+  
+  if (Envir.Dataset.C_vali_Positive$minPOD[i] == Envir.Dataset.C_vali_Positive$Peak_Frequency_zero[i]){
+    Envir.Dataset.C_vali_Positive$minPOD_endpoint[i] <- "Peak_Frequency_zero"}
+  
+  if (Envir.Dataset.C_vali_Positive$minPOD[i] == Envir.Dataset.C_vali_Positive$Total_Cells_zero[i]){
+    Envir.Dataset.C_vali_Positive$minPOD_endpoint[i] <- "Total_Cells_zero"}
+  
+}
+
+Envir.Dataset.C_vali_Positive$MOE_med <- Envir.Dataset.C_vali_Positive$minPOD/(Envir.Dataset.C_vali_Positive$Css*Envir.Dataset.C_vali_Positive$seem3)
+Envir.Dataset.C_vali_Positive$MOE_95 <- Envir.Dataset.C_vali_Positive$minPOD/(Envir.Dataset.C_vali_Positive$Css*Envir.Dataset.C_vali_Positive$seem3.u95)
+Envir.Dataset.C_vali_Positive$Dataset <- "II"
+
+
+# -------- Plot data prepare -------- 
+Envir.RISK.MOE.data <- rbind(Envir.Dataset.C_Positive, Envir.Dataset.C_vali_Positive)
+Envir.RISK.MOE.data$Chemical.Class <- as.factor(Envir.RISK.MOE.data$Chemical.Class)
+Envir.RISK.MOE.data$order <- as.numeric(as.factor(Envir.RISK.MOE.data$Chemical.Class))*10 + Envir.RISK.MOE.data$Pred.TdP.risk.5Pheno
+colnames(Envir.RISK.MOE.data)[16] <- "Sensitive endpoint"
+
+Fig.RISK.envi <- 
+ggplot(Envir.RISK.MOE.data, aes(x=reorder(Chemical.Name, -order), y=Pred.TdP.risk.5Pheno, fill = Chemical.Class, width=.4)) +
+  geom_bar(stat="identity", position="identity", size = 1) +
+  scale_y_continuous(breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), limits = c(0, 1))+
+  #scale_color_manual(values = c("#5964FF", "#FF5964"))+
+  labs(x = "Chemical", 
+       y= "Probability of positive TdP risk")+
+  ggtitle("A")+
+  coord_flip()+
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=10),
+        panel.grid = element_blank(),
+        panel.grid.major.y = element_line(color = "gray", linetype = 3),
+        panel.border = element_rect(size = 1.2),
+        legend.title = element_text(color = "black", face = "bold", size=10),
+        legend.text = element_text(color = "black", face = "bold", size=8),
+        legend.box.background = element_rect(colour = "black"),
+        legend.background = element_blank(),
+        legend.key.size = unit(0.5, 'cm'),
+        legend.position = c(0.85, 0.26), 
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold", size=15),
+        axis.text.y = element_text(color = "black", face = "bold"),
+        axis.text.x = element_text(color = "black", face = "bold", size=12),
+        plot.title = element_text(face="bold", size=18))
+
+
+Fig.MOE.envi <- 
+ggplot()+
+  geom_point(data = Envir.RISK.MOE.data, aes(x=reorder(Chemical.Name, -order), y=log10(MOE_med), shape = `Sensitive endpoint`), stat = "identity", size = 2.5, color = "white") +
+  geom_rect(aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+            data = data.frame(xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = 0), fill="#FEBBAD60") +
+  geom_rect(aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+            data = data.frame(xmin = -Inf, xmax = Inf, ymin = 0, ymax = 2), fill="#FED6CE60") +
+  geom_rect(aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+            data = data.frame(xmin = -Inf, xmax = Inf, ymin = 2, ymax = Inf), fill="#FFF1EF60") +
+  scale_x_discrete()+
+  
+  geom_point(data = Envir.RISK.MOE.data, aes(x=reorder(Chemical.Name, -order), y=log10(MOE_med), shape = `Sensitive endpoint`), stat = "identity", size = 2.5, color = "#016FB9") +
+  geom_point(data = Envir.RISK.MOE.data, aes(x=Chemical.Name, y=log10(MOE_95), shape = `Sensitive endpoint`), stat = "identity", size = 2.5, color = "#016FB9") +
+  geom_segment(data = Envir.RISK.MOE.data, aes(x = Chemical.Name, y = log10(MOE_med), xend = Chemical.Name, yend = log10(MOE_95)), size = 0.9, color = "#016FB9")+
+  
+  scale_shape_manual(values = c(16, 17, 15, 18))+
+  ylim(-4, 15)+
+  theme_bw()+
+  coord_flip()+
+  labs(x = "", y = "log10(MOE)")+
+  ggtitle("B") + 
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=10),
+        panel.grid = element_blank(),
+        panel.grid.major.y = element_line(color = "gray", linetype = 3),
+        panel.border = element_rect(size = 1.2),
+        legend.position = c(0.84, 0.3),  
+        legend.title = element_text(color = "black", face = "bold", size=10),
+        legend.text = element_text(color = "black", face = "bold", size=8),
+        legend.box.background = element_rect(colour = "black"),
+        legend.background = element_blank(),
+        legend.key.size = unit(0.5, 'cm'),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", face = "bold", size=15),
+        axis.text.x = element_text(color = "black", face = "bold", size=12),
+        axis.text.y = element_blank(),
+        plot.title = element_text(face="bold", size=18))
+
+tiff(width = 18, height = 18, "plots/Figure 6.tiff", units = "in", res=400)
+Fig.RISK.envi + Fig.MOE.envi + plot_layout(widths = c(1/2, 1/2))
+dev.off()
+```
+
+
+```{r Reproducibility evaluation}
+Dataset.C$Predicted_QT.TdP.risk <- predict(BMD50_5pheno_TdP.risk.model_C, Dataset.C, type = c("response"))
+Dataset.C_vali$Predicted_QT.TdP.risk <- predict(BMD50_5pheno_TdP.risk.model_C, Dataset.C_vali, type = c("response"))
+
+for(i in 1:1050){
+  if (identical(which(Dataset.C$Chemical.CAS == Dataset.C_vali$Chemical.CAS[i]), integer(0))){
+    Dataset.C_vali$overlap[i] <- "N"
+  } else {
+    Dataset.C_vali$overlap[i] <- "Y"
+  }
+  print(i)
+}
+table(Dataset.C_vali$overlap)
+
+Overlap_data <- Dataset.C_vali[which(Dataset.C_vali$overlap == "Y"), ]
+
+for (i in 1:87){
+  Overlap_data$Predicted_QT.TdP.risk_train[i] <-  Dataset.C$Predicted_QT.TdP.risk[which(Dataset.C$Chemical.CAS == Overlap_data$Chemical.CAS[i])]
+  print(i)
+}
+Overlap_data$Drug.lable <- "Non drug"
+Overlap_data$Drug.lable[c(which(Overlap_data$Chemical.Class == "Pharmaceutical" | 
+                                  Overlap_data$Chemical.Class == "CiPA pharmaceutical"))] <- "Drug"
+Overlap_data$QT.TdP_Positive_k_c <- as.numeric(Overlap_data$QT.TdP_Positive_k_c) - 1
+Overlap_data$QT.TdP_Positive_k_c[which(Overlap_data$Drug.lable == "Non drug")] <- 2
+Overlap_data$QT.TdP_Positive_k_c <- factor(Overlap_data$QT.TdP_Positive_k_c)
+
+Overlap_data$Consistency <- NA
+Overlap_data$Consistency[Overlap_data$Predicted_QT.TdP.risk_train > Threshold & Overlap_data$Predicted_QT.TdP.risk > Threshold] <- "Both Positive"
+Overlap_data$Consistency[Overlap_data$Predicted_QT.TdP.risk_train < Threshold & Overlap_data$Predicted_QT.TdP.risk < Threshold] <- "Both Negative"
+Overlap_data$Consistency[Overlap_data$Predicted_QT.TdP.risk_train < Threshold & Overlap_data$Predicted_QT.TdP.risk > Threshold] <- "Negative / Positive"
+Overlap_data$Consistency[Overlap_data$Predicted_QT.TdP.risk_train > Threshold & Overlap_data$Predicted_QT.TdP.risk < Threshold] <- "Positive / Negative"
+
+table(Overlap_data$Drug.lable)
+table(Overlap_data$QT.TdP_Positive_k_c)
+table(Overlap_data$Consistency[Overlap_data$QT.TdP_Positive_k_c == "0"])
+table(Overlap_data$Consistency[Overlap_data$QT.TdP_Positive_k_c == "1"])
+table(Overlap_data$Consistency[Overlap_data$QT.TdP_Positive_k_c == "2"])
+```
