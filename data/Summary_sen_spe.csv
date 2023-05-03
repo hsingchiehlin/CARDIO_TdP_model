@@ -1,0 +1,25 @@
+model,type,index,value
+Blinova et al. 2018,Predict risks of drugs in Dataset I,Sensitivity,0.73
+Blinova et al. 2018,Predict risks of drugs in Dataset I,Specificity,0.89
+Blinova et al. 2018,Internal cross-validation,Sensitivity,NA
+Blinova et al. 2018,Internal cross-validation,Specificity,NA
+Blinova et al. 2018,External validation,Sensitivity,NA
+Blinova et al. 2018,External validation,Specificity,NA
+A,Predict risks of drugs in Dataset I,Sensitivity,0.778
+A,Predict risks of drugs in Dataset I,Specificity,0.947
+A,Internal cross-validation,Sensitivity,0.611
+A,Internal cross-validation,Specificity,0.816
+A,External validation,Sensitivity,0.429
+A,External validation,Specificity,0.886
+B,Predict risks of drugs in Dataset I,Sensitivity,0.722
+B,Predict risks of drugs in Dataset I,Specificity,0.842
+B,Internal cross-validation,Sensitivity,0.556
+B,Internal cross-validation,Specificity,0.789
+B,External validation,Sensitivity,0.714
+B,External validation,Specificity,0.758
+C,Predict risks of drugs in Dataset I,Sensitivity,0.889
+C,Predict risks of drugs in Dataset I,Specificity,0.868
+C,Internal cross-validation,Sensitivity,0.833
+C,Internal cross-validation,Specificity,0.842
+C,External validation,Sensitivity,0.786
+C,External validation,Specificity,0.75

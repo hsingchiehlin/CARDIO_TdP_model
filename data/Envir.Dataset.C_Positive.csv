@@ -1,0 +1,4 @@
+Chemical.Number,Chemical.Name,Chemical.CAS,Chemical.Class,Peak_Frequency_up,Peak_Frequency_dn,Peak_Decay_Rise_Ratio_up,Peak_Frequency_zero,Total_Cells_zero,Pred.TdP.risk.5Pheno,Predicted_QT.TdP.risk_Lable,Css,seem3,seem3.u95
+75,Permethrin,52645-53-1,Pesticide,2.674475,6.256925,9.80678,34.4273,213.414,0.327464233,Positive,1.923,4.96E-07,1.16E-05
+81,Hexachlorophene,70-30-4,Pesticide,3.4516,3.070565,9.040285,5.00819,35.6009,0.346777718,Positive,781.4,1.13E-07,1.06E-04
+129,Dichlorodiphenyltrichloroethane,50-29-3,Pesticide,32.6499,5.7435,0.392786,30.86255,148.5195,0.625040149,Positive,11.74,6.80E-11,1.10E-09

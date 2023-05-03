@@ -1,0 +1,13 @@
+model,type,index,med,sd
+Blinova et al. 2018,Predict risks of drugs in Dataset I,AUC of ROC,0.872,
+Blinova et al. 2018,Internal cross-validation,AUC of ROC,0.862,
+Blinova et al. 2018,External validation,AUC of ROC,,
+A,Predict risks of drugs in Dataset I,AUC of ROC,0.902,
+A,Internal cross-validation,AUC of ROC,0.9005,0.0067
+A,External validation,AUC of ROC,0.777,
+B,Predict risks of drugs in Dataset I,AUC of ROC,0.83,
+B,Internal cross-validation,AUC of ROC,0.834,0.00929
+B,External validation,AUC of ROC,0.831,
+C,Predict risks of drugs in Dataset I,AUC of ROC,0.893,
+C,Internal cross-validation,AUC of ROC,0.894,0.011
+C,External validation,AUC of ROC,0.778,
