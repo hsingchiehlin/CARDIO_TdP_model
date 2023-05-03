@@ -105,6 +105,7 @@ dev.off()
 
 
 ```{r Model A - using POD data from 1 ind without replicates}
+# Note: Need to record the sensitivity, specificity in the file "data/Summary_sen_spe.csv", and AUC of ROC in the file "data/Summary_ROC.csv" while doing analysis
 Dataset.A <- read.csv("data/POD_Dataset A.csv") # rep notice
 
 Dataset.A$Peak_Frequency_up[Dataset.A$Peak_Frequency_up > 300] <- 300
@@ -531,6 +532,7 @@ ggdraw() +
 
 
 ```{r Model B - using POD data from 1 ind with 5 replicates}
+# Note: Need to record the sensitivity, specificity in the file "data/Summary_sen_spe.csv", and AUC of ROC in the file "data/Summary_ROC.csv" while doing analysis
 Dataset.B <- read.csv("data/POD_Dataset B.csv") # rep notice
 
 Dataset.B$Peak_Frequency_up[Dataset.B$Peak_Frequency_up > 300] <- 300
@@ -957,6 +959,7 @@ ggdraw() +
 
 
 ```{r Model C - using POD data from 5 ind with 1 replicates}
+# Note: Need to record the sensitivity, specificity in the file "data/Summary_sen_spe.csv", and AUC of ROC in the file "data/Summary_ROC.csv" while doing analysis
 Dataset.C <- read.csv("data/POD_Dataset C.csv") # rep notice
 
 Dataset.C$Peak_Frequency_up[Dataset.C$Peak_Frequency_up > 300] <- 300
@@ -1546,6 +1549,7 @@ dev.off()
 
 
 ```{r Predict TdP risk and MOE of environmental chemical}
+# Note: The following two commented section are for preparing data for calculating MOE; once generating files "Envir.Dataset.C_Positive.csv" and "Envir.Dataset.C_vali_Positive.csv", no need to run again.
 # -------- Traning dataset prepare ---------
 #Envir.Dataset.C_Positive <- Envir.Dataset.C[c(which(Envir.Dataset.C$Predicted_QT.TdP.risk_Lable == "Positive")), ]
 #for(i in 1:5){
@@ -1732,6 +1736,7 @@ Overlap_data$Consistency[Overlap_data$Predicted_QT.TdP.risk_train < Threshold & 
 Overlap_data$Consistency[Overlap_data$Predicted_QT.TdP.risk_train < Threshold & Overlap_data$Predicted_QT.TdP.risk > Threshold] <- "Negative / Positive"
 Overlap_data$Consistency[Overlap_data$Predicted_QT.TdP.risk_train > Threshold & Overlap_data$Predicted_QT.TdP.risk < Threshold] <- "Positive / Negative"
 
+# These results need to compile in the word file.
 table(Overlap_data$Drug.lable)
 table(Overlap_data$QT.TdP_Positive_k_c)
 table(Overlap_data$Consistency[Overlap_data$QT.TdP_Positive_k_c == "0"])
