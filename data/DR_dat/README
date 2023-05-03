@@ -1,5 +1,4 @@
 Datasets in this file are used to generate the the example of concentration-response profiles and their raw data points of different study designs (Figure 2). 
-As for the concentration-response results of other chemicals, please run the code in the file "Bayesian DR modeling code".
 Model A: single replicate of a single donor
 Model B: five replicates of a single donor
 Model C: single replicates of five separate donors
