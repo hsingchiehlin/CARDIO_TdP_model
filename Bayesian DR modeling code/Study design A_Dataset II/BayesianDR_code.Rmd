@@ -1,0 +1,471 @@
+---
+title: "Bayesian DR modeling"
+author: "Hsing-Chieh Lin"
+date: "2023-04-12"
+output: html_document
+---
+
+```{r Bayesian DR modeling}
+for (i in 1:1050){ 
+  library(parallel)
+  library(rstan)
+  library(MASS)
+  library(Hmisc) 
+  library(reshape2)
+  library(lattice)
+  library(metafor)
+  library(lognorm)
+  library(dplyr)
+  library(boot)
+  source("AllDatFunctionsV4.R")
+  source("ModelingFunctions.R")
+  set.seed(669661)
+  
+  
+  # Modeling and Processing 
+  
+  # !!! THE CODE CHUNKS IN THIS SECTION NEED TO ONLY RUN ONCE !!!
+  
+  ## Initialize rstan
+  
+  rstan_options(auto_write = TRUE)
+  
+  options(mc.cores = parallel::detectCores()) #
+  Sys.setenv(LOCAL_CPPFLAGS = '-march=native')
+  
+  ### Read in Data ###
+  
+  ChemKey<-read.table("LATEST.chemicals.decoded.iter.dat", header=T, fill=TRUE)
+  
+  ## No CO Data - PA & TCD
+  
+  if(file.exists("All.Parms.Clean.dat") == T) {
+    
+    dat.noCO<- read.table("All.Parms.Clean.dat", as.is = T, header = T)
+    
+  } else {
+    
+    dat.noCO<- read.table("All_Parameters_Master.dat", as.is = T, header = T)
+    
+    # cut out bad cell lines
+    
+    dat.noCO.clean<- subset(dat.noCO,(Cell.line != 1384 & Cell.line != 1236 & Cell.line !=1066))
+    
+    #export and read in
+    
+    write.table(dat.noCO.clean, "All.Parms.Clean.dat", sep = "\t", row.names = F)
+    
+    rm(dat.noCO.clean)
+    
+    dat.noCO<- read.table("All.Parms.Clean.dat", as.is = T, header = T)
+    
+  }
+  
+  ## Amp CO data - PF and BPM
+  
+  if(file.exists("Clean.Parms.AmpCO.dat") == T){
+    
+    dat.amp<- read.table("Clean.Parms.AmpCO.dat", as.is = T, header = T)
+    
+  } else{
+    
+    dat.amp<- read.table("All.Parms.All.AmpCO.dat", as.is = T, header = T)
+    
+    # address quiescent cells
+    
+    quiescent <- dat.amp$amplitude == 0 | dat.amp$n.peaks == 0
+    
+    dat.amp[quiescent,c(11:15,17:18,20:(dim(dat.amp)[2]))] <- NA
+    
+    # cut out bad cell lines
+    
+    dat.amp.clean<- subset(dat.amp,(Cell.line != 1384 & Cell.line != 1236 & Cell.line !=1066))
+    
+    #export and read in
+    
+    write.table(dat.amp.clean, "Clean.Parms.AmpCO.dat", sep = "\t", row.names = F)
+    
+    rm(dat.amp.clean)
+    
+    dat.amp<- read.table("Clean.Parms.AmpCO.dat", as.is = T, header = T)
+    
+  }
+  
+  ## Notch Amp CO data - DRR
+  
+  if(file.exists("Clean.Parms.NotchAmpCO.dat") == T){
+    
+    dat.notch<- read.table("Clean.Parms.NotchAmpCO.dat", as.is = T, header = T)
+    
+  } else{
+    
+    dat.notch<- read.table("All.Parms.All.NotchAmpCO.dat", as.is = T, header = T)
+    
+    # address quiescent cells
+    
+    quiescent <- dat.notch$amplitude == 0 | dat.notch$n.peaks == 0
+    
+    dat.notch[quiescent,c(11:15,17:18,20:(dim(dat.notch)[2]))] <- NA
+    
+    # cut out bad cell lines
+    
+    dat.notch.clean<- subset(dat.notch,(Cell.line != 1384 & Cell.line != 1236 & Cell.line !=1066))
+    
+    #export and read in
+    
+    write.table(dat.notch.clean, "Clean.Parms.NotchAmpCO.dat", sep = "\t", row.names = F)
+    
+    rm(dat.notch.clean)
+    
+    dat.notch<- read.table("Clean.Parms.NotchAmpCO.dat", as.is = T, header = T)
+    
+  }
+  
+  ## Set endpoints
+  
+  parmcolvec<-c("peak.width.avg","peak.width.avg", "peak.amp.avg","peak.amp.cv","peak.spacing.cv","decay.rise.ratio.avg", "peak.freq.avg", "peak.freq.avg", "peak.freq.avg", "Total.Cells", "All.Nuclei.Mean.Integer.Itensity", "Positive.W2.Mean.Stain.Area", "Positive.W2.Mean.Stain.Integr.Intens", "Cell.Positive.W2.Mean.Stain.Area", "Total.Cells" )
+  parmnamevec<-c("Peak Width","Peak Width","Peak Amplitude", "Peak Amplitude CV","Peak Spacing CV","Peak Decay-Rise Ratio", "Peak Frequency", "Peak Frequency", "Asystole", "Total Cells", "Nuclei Intensity", "Mitochondria Count", "Mitochondira Membrane Potential", "Mitochondira Per Cell", "Total Cells" )
+  parmnamenormvec<-c("Peak_Width_up","Peak_Width_dn", "Peak_Amplitude_zero",
+                     "Peak_Amplitude_CV_up","Peak_Spacing_CV_up",
+                     "Peak_Decay_Rise_Ratio_up", "Peak_Frequency_up", "Peak_Frequency_dn", "Peak_Frequency_zero", 
+                     "Total_Cells_dn", "Nuclei_Intensity_up", "Mitochondira_dn", "MitoMembrane_dn", "Cell_Mitochondria_dn",
+                     "Total_Cells_zero")
+  # set direction (pos or negative) for each parameter
+  dirvec<-c(1,-1,0,1,1,1,1,-1,0,-1,1,-1,-1,-1,0)
+  
+  chemnum = i
+  
+  chem_name<- as.character(ChemKey[match(chemnum, ChemKey$Chemical.Number),2])
+  
+  chempath<-paste(getwd(),"/",chem_name, sep="")
+  
+  dir.create(path = chempath, showWarnings = FALSE)
+  
+  # Iterate through each of the 9 peak parameters
+  for (k in c(6,7,8,9,15)) {  
+    parmcol<-parmcolvec[k]
+    parmname<-parmnamevec[k]
+    parmnamenorm<-parmnamenormvec[k]
+    direction<-dirvec[k]
+    if(k == 3 | k == 9 | k == 10 | k == 15){
+      dat = dat.noCO
+    } else if (k == 1 |k == 2 | k == 7 | k == 8 | k == 5){
+      dat = dat.amp
+    } else if (k == 6) {
+      dat = dat.notch
+    }
+    # Iterate through chemicals
+    
+    iter = (ChemKey[match(chem_name, ChemKey$Chemical.Name),which(colnames(ChemKey) == parmnamenorm)])*1000
+    
+    #output R file
+    stan_dat_results<-make_stan_dat(dat=dat,chemnum=chemnum,
+                                    parmcol=parmcol,parmname=parmname,parmnamenorm=parmnamenorm)
+    
+    #output CSV files  
+    stan_fit_results<-do_stan_fit(stan_dat_results$stan_dat,
+                                  stan_dat_results$fileprefix,direction=direction, verbose = F, iter = iter)
+    
+    # If Rhat is > 1.2 for some parameters, may need to increase number of iterations in "do_stan_fit"
+    plot_stan_fit_rhat(stan_fit_results$stan_fit,stan_fit_results$stan_samples,
+                       stan_dat_results$fileprefix,dopdf=TRUE)
+    
+    # Rhat Convergence analysis
+    
+    RhatDat <- data.frame(Parm = stan_fit_results[["stan_fit"]]@sim[["fnames_oi"]] , 
+                          Rhat = stan_fit_results[["stan_fit"]]@.MISC[["summary"]][["rhat"]])
+    
+    RhatSum <- data.frame(chemical.name = chem_name, MinRhat = min(RhatDat$Rhat, na.rm = T), 
+                          MedRhat = median(RhatDat$Rhat, na.rm = T), MaxRhat = max(RhatDat$Rhat, na.rm = T))
+    
+    write.csv(RhatSum, paste(chempath, "/", "C", chemnum,"_","standat_v7_do_stan_fit_",parmnamenorm, "_RhatDat.csv", sep = "") )
+    
+    n_eff <- stan_fit_results[["stan_fit"]]@.MISC[["summary"]][["ess"]]
+    
+    n_eff <- n_eff / iter
+    
+    min.n_eff <- min(n_eff, na.rm = T)
+    
+    ##Diganostic Plot export if convergence not reached or divergent transition detected
+    
+    if(RhatSum$MaxRhat > 1.2){
+      
+      cat("\n", "!!!! CONVERGENCE FAILED | DIVERGENT TRANSITION DETECTED !!!!", "\n")
+      
+      ## Output Rhat data frame of parms that don't converge90/19
+      
+      ConvergenceFail.df <- subset(RhatDat, Rhat > 1.2)
+      
+      write.csv(ConvergenceFail.df, paste("C", chemnum,"_","standat_v7_do_stan_fit_",parmnamenorm, "_ConvergenceFail_Rhat.csv", sep = ""), row.names = F)
+      
+    }
+    
+    stan_fit_results<-get_stan_fit_csv(stan_dat_results$stan_dat,  
+                                       stan_dat_results$fileprefix,direction=direction)
+  }
+  
+  rm(list = ls())
+}
+
+
+
+# ----------------------- Used to check the raw dose-response data ----------------------- 
+# can apply these codes after try one chemical DR fitting, and make sure the raw DR is correct 
+ChemKey<-read.table("LATEST.chemicals.decoded.iter.dat", header=T, fill=TRUE)
+endpoint.list <- c("Peak_Frequency_up", "Peak_Frequency_dn", "Peak_Decay_Rise_Ratio_up","Peak_Frequency_zero", "Total_Cells_zero")
+
+for(i in 1:5){
+  
+  endpoint <- endpoint.list[i]
+  
+  pdf(file = paste("Data_", endpoint, "_updated.pdf", sep = ""))
+  for(j in 1:1050){
+    
+    che.num <- ChemKey$Chemical.Number[j]
+    che.name <- ChemKey$Chemical.Name[j]
+    file.name <- paste(che.name, "/C", che.num, "_standat_v7_do_stan_fit_", endpoint, "_dat.R", sep = "")
+    source(file.name)
+    
+    x[which(x == 0)]<- 0.001
+    plot(x=log10(x), y=ys, col = cell, 
+         main = paste(che.num, che.name, sep = "_"), xlim = c(- 3, 2))
+    print(j)
+  }
+  print(endpoint)
+  dev.off()
+}
+
+```
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(parallel)
+library(rstan)
+library(MASS)
+library(Hmisc) 
+library(reshape2)
+library(lattice)
+library(metafor)
+library(lognorm)
+library(dplyr)
+library(boot)
+
+source("AllDatFunctionsV4.R")
+source("ModelingFunctions.R")
+```
+
+
+### Process the outputted MCMC chain CSV files to remove excess rows, etc.
+```{r posterior sampling csv processing}
+
+chemmap<- read.table("LATEST.chemicals.decoded.iter.dat", header=T, fill=TRUE)
+
+## set up to loop through directories using name of chemical list to match directory name
+
+endpoint.list<- c("Peak_Frequency_up", "Peak_Frequency_dn", "Peak_Frequency_zero", "Peak_Decay_Rise_Ratio_up", "Total_Cells_zero") #
+
+for (j in 1:1050){ 
+for (i in c(1:5)) {
+
+  cat("\n", endpoint.list[i], "\n")
+  
+  j = j 
+  
+  files = list.files(path = paste(getwd(),"//", chemmap[j,2], sep = "") ,pattern= paste(endpoint.list[i],"_samples_*", sep = ""))
+    
+  cat("\n", chemmap[j,1], "...\n")
+  
+  if(length(files) == 0){
+      
+      cat("Files not found")
+      
+      next()
+      
+    }
+    
+    ## loop through csv files in directories and reformat
+    
+    for (f in 1:length(files)){
+      
+      file.name<- files[f]
+      
+      ## skip file header
+      
+      dat.tmp<- read.csv(paste(getwd(), "/", chemmap[j,2], "/",file.name, sep = ""), skip = 25, header = FALSE, as.is = TRUE)
+      
+      ## eliminate comments in rows 2-4
+      
+      dat.tmp<- dat.tmp[-2:-4, ]
+      
+      colnames(dat.tmp)<- dat.tmp[1, ]
+      
+      dat.tmp<- dat.tmp[-1, ]
+      
+      write.csv(dat.tmp, paste(getwd(), "/", chemmap[j,2], "/",file.name, sep = ""), row.names = FALSE)
+      
+      cat(f, "..")
+      
+    }
+    
+    #setwd("..")
+    
+}
+}
+  
+```
+  
+### Get MCMC sample files for analysis - 250 random samples/ chain, excluding divergent data points for file w/ 1000 samples total
+```{r MCMC Sampling - with directory creation - hash out path, chempath, dir create, adjust write csv if no directories}
+  
+endpoint.list<- c("Peak_Frequency_up", "Peak_Frequency_dn", "Peak_Frequency_zero", "Peak_Decay_Rise_Ratio_up", "Total_Cells_zero")
+
+for (j in 1:1050){ # j = chenum + 1
+for(i in c(1:5)){
+    
+  tmp.endpoint <- endpoint.list[i]
+    
+  cat("\n", tmp.endpoint, "\n")
+    
+  j = j 
+      
+  chemical.name <- chemmap[j, 2]
+      
+      
+  chemical.num <- chemmap[j, 1]
+      
+      
+  cat("\n", chemical.name, chemical.num, "(", signif((j / (nrow(chemmap)) * 100), 2), "%)", "\n")
+      
+      
+  chempath <- paste(getwd(), "/", chemical.name, sep = "")
+      
+  if (file.exists(paste(getwd(), "/", chemical.name, "/", "C",chemical.num, "_standat_v7_do_stan_fit_", tmp.endpoint, "_dat.R",sep="")) == FALSE){
+        
+        cat("\n", "File Not Found", "\n")
+        
+        next()
+        
+    }
+      
+    files<- ChemDatRead(chemical.name = chemical.name, chemical.num = chemical.num, endpoint = tmp.endpoint)
+    
+    for (l in 1:length(files)) assign(files[l], read.csv(paste(getwd(), "/", chemical.name, "/",files[l],sep="")))
+  
+      mcmc.samples <- data.frame()
+    
+      for(l in 1:length(files)){
+      
+        sample.frame <- eval(parse(text = files[l]))
+        
+        sample.frame <- sample.frame[2:(nrow(sample.frame)-5),]
+        
+        sample.frame <- sample.frame[sample.frame$divergent_ %in% 0,]
+        
+        tmp.samples <- sample_n(sample.frame, 250, replace = F)
+    
+        mcmc.samples <- rbind(mcmc.samples, tmp.samples)
+      
+      }
+      
+      rm(list = files)
+    
+      write.csv(mcmc.samples, paste(chempath,"/", "C", chemical.num,"_standat_v7_do_stan_fit_", tmp.endpoint, "_MCMC_Samples.csv", sep = ""))
+    
+  }
+  
+}
+ 
+```
+
+
+### Get POD
+```{r POD compiling codes}
+endpoint.list<- c("Peak_Frequency_up" ,"Peak_Frequency_dn", "Peak_Decay_Rise_Ratio_up", "Peak_Frequency_zero", "Total_Cells_zero")
+
+POD.ALL.endpoints <- as.data.frame(matrix(NA, 138, 5))
+colnames(POD.ALL.endpoints) <- endpoint.list
+
+for(i in c(1:3)){
+  
+  for(j in 1:1050){
+    
+    tmp.endpoint <- endpoint.list[i]
+    
+    chemical.name <- chemmap[j, 2]
+    
+    chemical.num <- chemmap[j, 1]
+    
+    chempath <- paste(getwd(), "/", chemical.name, sep = "")
+    
+    all.mcmc.dat <- read.csv(paste(chempath,"/", "C", chemical.num,"_standat_v7_do_stan_fit_", tmp.endpoint, "_MCMC_Samples.csv", sep = ""))
+    
+    temp.mcmc.dat <- all.mcmc.dat[, which(colnames(all.mcmc.dat) == "ec05.1")]
+
+    POD.ALL.endpoints[j,i] <- quantile(temp.mcmc.dat, probs = 0.5)
+
+    rownames(POD.ALL.endpoints) <- chemmap$Chemical.Name
+
+    write.csv(POD.ALL.endpoints, paste(getwd(), "/", "POD_study_design_A.CSV", sep = ""), row.names = T)
+
+    print(j)
+  }
+  print(endpoint.list[i])
+}
+
+for(i in c(4)){
+  
+  for(j in c(1:1050)){
+    
+    tmp.endpoint <- endpoint.list[i]
+    
+    chemical.name <- chemmap[j, 2]
+    
+    chemical.num <- chemmap[j, 1]
+    
+    chempath <- paste(getwd(), "/", chemical.name, sep = "")
+    
+    all.mcmc.dat <- read.csv(paste(chempath,"/", "C", chemical.num,"_standat_v7_do_stan_fit_", tmp.endpoint, "_MCMC_Samples.csv", sep = ""))
+    
+    temp.mcmc.dat <- all.mcmc.dat[, which(colnames(all.mcmc.dat) == "ec95.1")]
+
+    POD.ALL.endpoints[j,i] <- quantile(temp.mcmc.dat, probs = 0.5)
+
+    rownames(POD.ALL.endpoints) <- chemmap$Chemical.Name
+
+    write.csv(POD.ALL.endpoints, paste(getwd(), "/", "POD_study_design_A.CSV", sep = ""), row.names = T)
+
+    print(j)
+  }
+  print(endpoint.list[i])
+}
+
+
+for(i in c(5)){
+  
+  for(j in c(1:1050)){
+    
+    tmp.endpoint <- endpoint.list[i]
+    
+    chemical.name <- chemmap[j, 2]
+    
+    chemical.num <- chemmap[j, 1]
+    
+    chempath <- paste(getwd(), "/", chemical.name, sep = "")
+    
+    all.mcmc.dat <- read.csv(paste(chempath,"/", "C", chemical.num,"_standat_v7_do_stan_fit_", tmp.endpoint, "_MCMC_Samples.csv", sep = ""))
+    
+    temp.mcmc.dat <- all.mcmc.dat[, which(colnames(all.mcmc.dat) == "ec10.1")]
+
+    POD.ALL.endpoints[j,i] <- quantile(temp.mcmc.dat, probs = 0.5)
+
+    rownames(POD.ALL.endpoints) <- chemmap$Chemical.Name
+
+    write.csv(POD.ALL.endpoints, paste(getwd(), "/", "POD_study_design_A.CSV", sep = ""), row.names = T)
+
+    print(j)
+  }
+  print(endpoint.list[i])
+}
+
+```
