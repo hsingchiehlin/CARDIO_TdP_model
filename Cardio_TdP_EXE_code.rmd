@@ -106,7 +106,7 @@ dev.off()
 
 ```{r Model A - using POD data from 1 ind without replicates}
 # Note: Need to record the sensitivity, specificity in the file "data/Summary_sen_spe.csv", and AUC of ROC in the file "data/Summary_ROC.csv" while doing analysis
-Dataset.A <- read.csv("data/POD_Dataset A.csv") # rep notice
+Dataset.A <- read.csv("data/POD_Dataset I_Design A.csv") # rep notice
 
 Dataset.A$Peak_Frequency_up[Dataset.A$Peak_Frequency_up > 300] <- 300
 Dataset.A$Peak_Frequency_dn[Dataset.A$Peak_Frequency_dn > 300] <- 300
@@ -426,7 +426,7 @@ ggplot(Predicted.risk.results_A_croval, aes(x=reorder(Chemical.Name, -order), y=
 
 
 # --------------- External validation ---------------
-Dataset.A_vali <- read.csv("data/POD_Dataset A_B_validated.csv")
+Dataset.A_vali <- read.csv("data/POD_Dataset II_Design AB.csv")
 Dataset.A_vali$Peak_Frequency_up[Dataset.A_vali$Peak_Frequency_up > 300] <- 300
 Dataset.A_vali$Peak_Frequency_dn[Dataset.A_vali$Peak_Frequency_dn > 300] <- 300
 Dataset.A_vali$Peak_Decay_Rise_Ratio_up[Dataset.A_vali$Peak_Decay_Rise_Ratio_up > 300] <- 300
@@ -533,7 +533,7 @@ ggdraw() +
 
 ```{r Model B - using POD data from 1 ind with 5 replicates}
 # Note: Need to record the sensitivity, specificity in the file "data/Summary_sen_spe.csv", and AUC of ROC in the file "data/Summary_ROC.csv" while doing analysis
-Dataset.B <- read.csv("data/POD_Dataset B.csv") # rep notice
+Dataset.B <- read.csv("data/POD_Dataset I_Design B.csv") # rep notice
 
 Dataset.B$Peak_Frequency_up[Dataset.B$Peak_Frequency_up > 300] <- 300
 Dataset.B$Peak_Frequency_dn[Dataset.B$Peak_Frequency_dn > 300] <- 300
@@ -853,7 +853,7 @@ ggplot(Predicted.risk.results_B_croval, aes(x=reorder(Chemical.Name, -order), y=
 
 
 # --------------- External validation ---------------
-Dataset.B_vali <- read.csv("data/POD_Dataset A_B_validated.csv")
+Dataset.B_vali <- read.csv("data/POD_Dataset II_Design AB.csv")
 Dataset.B_vali$Peak_Frequency_up[Dataset.B_vali$Peak_Frequency_up > 300] <- 300
 Dataset.B_vali$Peak_Frequency_dn[Dataset.B_vali$Peak_Frequency_dn > 300] <- 300
 Dataset.B_vali$Peak_Decay_Rise_Ratio_up[Dataset.B_vali$Peak_Decay_Rise_Ratio_up > 300] <- 300
@@ -960,7 +960,7 @@ ggdraw() +
 
 ```{r Model C - using POD data from 5 ind with 1 replicates}
 # Note: Need to record the sensitivity, specificity in the file "data/Summary_sen_spe.csv", and AUC of ROC in the file "data/Summary_ROC.csv" while doing analysis
-Dataset.C <- read.csv("data/POD_Dataset C.csv") # rep notice
+Dataset.C <- read.csv("data/POD_Dataset I_Design C.csv") # rep notice
 
 Dataset.C$Peak_Frequency_up[Dataset.C$Peak_Frequency_up > 300] <- 300
 Dataset.C$Peak_Frequency_dn[Dataset.C$Peak_Frequency_dn > 300] <- 300
@@ -1280,7 +1280,7 @@ ggplot(Predicted.risk.results_C_croval, aes(x=reorder(Chemical.Name, -order), y=
 
 
 # --------------- External validation ---------------
-Dataset.C_vali <- read.csv("data/POD_Dataset C_validated.csv")
+Dataset.C_vali <- read.csv("data/POD_Dataset II_Design C.csv")
 Dataset.C_vali$Peak_Frequency_up[Dataset.C_vali$Peak_Frequency_up > 300] <- 300
 Dataset.C_vali$Peak_Frequency_dn[Dataset.C_vali$Peak_Frequency_dn > 300] <- 300
 Dataset.C_vali$Peak_Decay_Rise_Ratio_up[Dataset.C_vali$Peak_Decay_Rise_Ratio_up > 300] <- 300
@@ -1549,7 +1549,7 @@ dev.off()
 
 
 ```{r Predict TdP risk and MOE of environmental chemical}
-# Note: The following two commented section are for preparing data for calculating MOE; once generating files "Envir.Dataset.C_Positive.csv" and "Envir.Dataset.C_vali_Positive.csv", no need to run again.
+# Note: The following two commented section are for preparing data for calculating MOE; once generating files "Envir.Dataset I_Design C_Positive.csv" and "Envir.Dataset II_Design C_Positive.csv", no need to run again.
 # -------- Traning dataset prepare ---------
 #Envir.Dataset.C_Positive <- Envir.Dataset.C[c(which(Envir.Dataset.C$Predicted_QT.TdP.risk_Lable == "Positive")), ]
 #for(i in 1:5){
@@ -1558,7 +1558,7 @@ dev.off()
 #}
 #Envir.Dataset.C_Positive$Css <- as.numeric(Envir.Dataset.C_Positive$Css)
 #Envir.Dataset.C_Positive <- Envir.Dataset.C_Positive[-c(which(is.na(Envir.Dataset.C_Positive$Css))), ]
-#write.csv(Envir.Dataset.C_Positive, "data/Envir.Dataset.C_Positive.csv")
+#write.csv(Envir.Dataset.C_Positive, "data/Envir.Dataset I_Design C_Positive.csv")
 
 # -------- Validation dataset prepare ---------
 #Envir.Dataset.C_vali_Positive <- Envir.Dataset.C_vali[c(which(Envir.Dataset.C_vali$Predicted_QT.TdP.risk_Lable == "Positive")), ]
@@ -1568,10 +1568,10 @@ dev.off()
 #}
 #Envir.Dataset.C_vali_Positive$Css <- as.numeric(Envir.Dataset.C_vali_Positive$Css)
 #Envir.Dataset.C_vali_Positive <- Envir.Dataset.C_vali_Positive[-c(which(is.na(Envir.Dataset.C_vali_Positive$Css))), ]
-#write.csv(Envir.Dataset.C_vali_Positive, "data/Envir.Dataset.C_vali_Positive.csv")
+#write.csv(Envir.Dataset.C_vali_Positive, "data/Envir.Dataset II_Design C_Positive.csv")
 
 # -------- Traning dataset ---------
-Envir.Dataset.C_Positive <- read.csv("data/Envir.Dataset.C_Positive.csv")
+Envir.Dataset.C_Positive <- read.csv("data/Envir.Dataset I_Design C_Positive.csv")
 Envir.Dataset.C_Positive$minPOD <- apply(Envir.Dataset.C_Positive[, c("Peak_Frequency_up", "Peak_Frequency_dn", "Peak_Decay_Rise_Ratio_up",
                                  "Peak_Frequency_zero", "Total_Cells_zero")], 1, FUN = min, na.rm = TRUE)
 
@@ -1599,7 +1599,7 @@ Envir.Dataset.C_Positive$Chemical.Name <- paste(Envir.Dataset.C_Positive$Chemica
 Envir.Dataset.C_Positive$Dataset <- "I"
 
 # -------- Validated dataset ---------
-Envir.Dataset.C_vali_Positive <- read.csv("data/Envir.Dataset.C_vali_Positive.csv")
+Envir.Dataset.C_vali_Positive <- read.csv("data/Envir.Dataset II_Design C_Positive.csv")
 Envir.Dataset.C_vali_Positive <- Envir.Dataset.C_vali_Positive[-c(which(is.na(Envir.Dataset.C_vali_Positive$seem3))), ]
 Envir.Dataset.C_vali_Positive$minPOD <- apply(Envir.Dataset.C_vali_Positive[, c("Peak_Frequency_up", "Peak_Frequency_dn", "Peak_Decay_Rise_Ratio_up",
                                  "Peak_Frequency_zero", "Total_Cells_zero")], 1, FUN = min, na.rm = TRUE)
