@@ -1,1 +1,4 @@
-For deriving the PODs from each dataset and study design, the Bayesian dose-response modeling should be executed in respective folder. The results of PODS for five phenotypes were complied to be files - POD_Dataset I_Design A.csv, POD_Dataset I_Design B.csv, POD_Dataset I_Design C.csv, and POD_Dataset II_Design AB.csv, in the folder "data". As for the file "POD_Dataset II_Design C", the PODs were directly collected from the results of 
+For deriving the PODs from each dataset and study design, the Bayesian dose-response modeling should be executed in the respective folder. 
+The results of PODS for five phenotypes complied to be files - POD_Dataset I_Design A.csv, POD_Dataset I_Design B.csv, POD_Dataset I_Design C.csv, and POD_Dataset II_Design AB.csv, in the folder "data". 
+As for the file "POD_Dataset II_Design C", the PODs were directly collected from the results of Burnett et al. (2021).
+The Excel file "Cardio_iternum&convergence.xlsx" contains the iterations for MCMC simulation and the convergency status.
