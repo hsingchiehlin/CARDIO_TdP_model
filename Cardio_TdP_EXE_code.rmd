@@ -258,7 +258,7 @@ ggplot(Predicted.risk.results_A, aes(x=reorder(Chemical.Name, -order), y=Pred.Td
   scale_color_manual(values = c("#5964FF", "#FF5964"))+
   scale_shape_manual(values = c(1, 16)) + 
   labs(x = "Chemical", 
-       y= "Probability of positive TdP risk")+
+       y= "Probability of positive for TdP")+
   ggtitle("D") +
   coord_flip()+
   theme_bw() + 
@@ -405,10 +405,10 @@ ggplot(Predicted.risk.results_A_croval, aes(x=reorder(Chemical.Name, -order), y=
   scale_shape_manual(values = c(1, 16)) + 
   ggtitle("A. Model A") +
   labs(x = "Chemical", 
-       y= "Probability of positive TdP risk")+
+       y= "Probability of positive for TdP")+
   coord_flip()+
   labs(x = "Chemical", 
-       y= "Probability of positive TdP risk")+
+       y= "Probability of positive for TdP")+
   coord_flip()+
   theme_bw() + 
   theme(text=element_text(family="sans", face="plain", color="#000000", size=10),
@@ -485,7 +485,7 @@ ggplot(Predicted.risk.results_A_extval, aes(x=reorder(Chemical.Name, -order), y=
   scale_color_manual(values = c("#5964FF", "#FF5964"))+
   scale_shape_manual(values = c(1, 16)) + 
   labs(x = "Chemical", 
-       y= "Probability of positive TdP risk")+
+       y= "Probability of positive for TdP")+
   ggtitle("A. Model A") +
   #coord_flip()+
   theme_bw() + 
@@ -685,7 +685,7 @@ ggplot(Predicted.risk.results_B, aes(x=reorder(Chemical.Name, -order), y=Pred.Td
   scale_color_manual(values = c("#5964FF", "#FF5964"))+
   scale_shape_manual(values = c(1, 16)) + 
   labs(x = "Chemical", 
-       y= "Probability of positive TdP risk")+
+       y= "Probability of positive for TdP")+
   ggtitle("D") +
   coord_flip()+
   theme_bw() + 
@@ -832,10 +832,10 @@ ggplot(Predicted.risk.results_B_croval, aes(x=reorder(Chemical.Name, -order), y=
   scale_shape_manual(values = c(1, 16)) + 
   ggtitle("B. Model B") +
   labs(x = "Chemical", 
-       y= "Probability of positive TdP risk")+
+       y= "Probability of positive for TdP")+
   coord_flip()+
   labs(x = "Chemical", 
-       y= "Probability of positive TdP risk")+
+       y= "Probability of positive for TdP")+
   coord_flip()+
   theme_bw() + 
   theme(text=element_text(family="sans", face="plain", color="#000000", size=10),
@@ -912,7 +912,7 @@ ggplot(Predicted.risk.results_B_extval, aes(x=reorder(Chemical.Name, -order), y=
   scale_color_manual(values = c("#5964FF", "#FF5964"))+
   scale_shape_manual(values = c(1, 16)) + 
   labs(x = "Chemical", 
-       y= "Probability of positive TdP risk")+
+       y= "Probability of positive for TdP")+
   ggtitle("B. Model B") +
   #coord_flip()+
   theme_bw() + 
@@ -1112,7 +1112,7 @@ ggplot(Predicted.risk.results_C, aes(x=reorder(Chemical.Name, -order), y=Pred.Td
   scale_color_manual(values = c("#5964FF", "#FF5964"))+
   scale_shape_manual(values = c(1, 16)) + 
   labs(x = "Chemical", 
-       y= "Probability of positive TdP risk")+
+       y= "Probability of positive for TdP")+
   ggtitle("D") +
   coord_flip()+
   theme_bw() + 
@@ -1259,10 +1259,10 @@ ggplot(Predicted.risk.results_C_croval, aes(x=reorder(Chemical.Name, -order), y=
   scale_shape_manual(values = c(1, 16)) + 
   ggtitle("C. Model C") +
   labs(x = "Chemical", 
-       y= "Probability of positive TdP risk")+
+       y= "Probability of positive for TdP")+
   coord_flip()+
   labs(x = "Chemical", 
-       y= "Probability of positive TdP risk")+
+       y= "Probability of positive for TdP")+
   coord_flip()+
   theme_bw() + 
   theme(text=element_text(family="sans", face="plain", color="#000000", size=10),
@@ -1339,7 +1339,7 @@ ggplot(Predicted.risk.results_C_extval, aes(x=reorder(Chemical.Name, -order), y=
   scale_color_manual(values = c("#5964FF", "#FF5964"))+
   scale_shape_manual(values = c(1, 16)) + 
   labs(x = "Chemical", 
-       y= "Probability of positive TdP risk")+
+       y= "Probability of positive for TdP")+
   ggtitle("C. Model C") +
   #coord_flip()+
   theme_bw() + 
@@ -1400,8 +1400,8 @@ dev.off()
 sen_spe.dat <- read.csv("data/Summary_sen_spe.csv")
 roc.dat <- read.csv("data/Summary_ROC.csv")
 
-sen_spe.dat$type <- factor(sen_spe.dat$type, c("Predict risks of drugs in Dataset I", "Internal cross-validation", "External validation"))
-roc.dat$type <- factor(roc.dat$type, c("Predict risks of drugs in Dataset I", "Internal cross-validation", "External validation"))
+sen_spe.dat$type <- factor(sen_spe.dat$type, c("Model performance (Dataset I)", "Internal cross-validation (Dataset I)", "External validation (Dataset II)"))
+roc.dat$type <- factor(roc.dat$type, c("Model performance (Dataset I)", "Internal cross-validation (Dataset I)", "External validation (Dataset II)"))
 
 sen_spe.dat$model <- factor(sen_spe.dat$model, c("Blinova et al. 2018", "A", "B", "C"))
 roc.dat$model <- factor(roc.dat$model, c("Blinova et al. 2018", "A", "B", "C"))
@@ -1499,11 +1499,11 @@ Envir.Dataset.C_vali$Predicted_QT.TdP.risk_Lable[Envir.Dataset.C_vali$Pred.TdP.r
 Envir.Dataset.C_vali$Predicted_QT.TdP.risk_Lable[Envir.Dataset.C_vali$Pred.TdP.risk.5Pheno < Threshold] <- "Negative"
 
 counts <- ddply(Envir.Dataset.C, .(Envir.Dataset.C$Chemical.Class, Envir.Dataset.C$Predicted_QT.TdP.risk_Lable), nrow)
-names(counts) <- c("Class", "Risk", "Count")
-counts$Risk <- factor(counts$Risk, levels = c("Positive", "Negative"))
+names(counts) <- c("Class", "TdP", "Count")
+counts$TdP <- factor(counts$TdP, levels = c("Positive", "Negative"))
 
 Fig.RISK.envi.DAT1.bar <- 
-  ggplot(counts, aes(fill=Risk, y=Count, x=Class)) + 
+  ggplot(counts, aes(fill=TdP, y=Count, x=Class)) + 
   geom_bar(position="stack", stat="identity") +
   ggtitle("A. Dataset I") +
   theme_bw() + 
@@ -1521,11 +1521,11 @@ Fig.RISK.envi.DAT1.bar <-
         plot.title = element_text(face="bold", size=15))
 
 counts <- ddply(Envir.Dataset.C_vali, .(Envir.Dataset.C_vali$Chemical.Class, Envir.Dataset.C_vali$Predicted_QT.TdP.risk_Lable), nrow)
-names(counts) <- c("Class", "Risk", "Count")
-counts$Risk <- factor(counts$Risk, levels = c("Positive", "Negative"))
+names(counts) <- c("Class", "TdP", "Count")
+counts$TdP <- factor(counts$TdP, levels = c("Positive", "Negative"))
 
 Fig.RISK.envi.DAT2.bar <- 
-  ggplot(counts, aes(fill=Risk, y=Count, x=Class)) + 
+  ggplot(counts, aes(fill=TdP, y=Count, x=Class)) + 
   geom_bar(position="stack", stat="identity") +
   ggtitle("B. Dataset II") +
   theme_bw() + 
@@ -1639,7 +1639,7 @@ ggplot(Envir.RISK.MOE.data, aes(x=reorder(Chemical.Name, -order), y=Pred.TdP.ris
   scale_y_continuous(breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), limits = c(0, 1))+
   #scale_color_manual(values = c("#5964FF", "#FF5964"))+
   labs(x = "Chemical", 
-       y= "Probability of positive TdP risk")+
+       y= "Probability of positive for TdP")+
   ggtitle("A")+
   coord_flip()+
   theme_bw() + 
@@ -1656,36 +1656,38 @@ ggplot(Envir.RISK.MOE.data, aes(x=reorder(Chemical.Name, -order), y=Pred.TdP.ris
         axis.ticks = element_line(color = "black"),
         axis.title = element_text(color = "black", face = "bold", size=15),
         axis.text.y = element_text(color = "black", face = "bold"),
-        axis.text.x = element_text(color = "black", face = "bold", size=12),
+        axis.text.x = element_text(color = "black", size=12),
         plot.title = element_text(face="bold", size=18))
 
 
 Fig.MOE.envi <- 
 ggplot()+
-  geom_point(data = Envir.RISK.MOE.data, aes(x=reorder(Chemical.Name, -order), y=log10(MOE_med), shape = `Sensitive endpoint`), stat = "identity", size = 2.5, color = "white") +
+  geom_point(data = Envir.RISK.MOE.data, aes(x=reorder(Chemical.Name, -order), y=MOE_med, shape = `Sensitive endpoint`), stat = "identity", size = 2.5, color = "white") +
   geom_rect(aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
-            data = data.frame(xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = 0), fill="#FEBBAD60") +
+            data = data.frame(xmin = -Inf, xmax = Inf, ymin = 0, ymax = 1), fill="#FEBBAD60") +
   geom_rect(aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
-            data = data.frame(xmin = -Inf, xmax = Inf, ymin = 0, ymax = 2), fill="#FED6CE60") +
+            data = data.frame(xmin = -Inf, xmax = Inf, ymin = 1, ymax = 100), fill="#FED6CE60") +
   geom_rect(aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
-            data = data.frame(xmin = -Inf, xmax = Inf, ymin = 2, ymax = Inf), fill="#FFF1EF60") +
+            data = data.frame(xmin = -Inf, xmax = Inf, ymin = 100, ymax = Inf), fill="#FFF1EF60") +
   scale_x_discrete()+
   
-  geom_point(data = Envir.RISK.MOE.data, aes(x=reorder(Chemical.Name, -order), y=log10(MOE_med), shape = `Sensitive endpoint`), stat = "identity", size = 2.5, color = "#016FB9") +
-  geom_point(data = Envir.RISK.MOE.data, aes(x=Chemical.Name, y=log10(MOE_95), shape = `Sensitive endpoint`), stat = "identity", size = 2.5, color = "#016FB9") +
-  geom_segment(data = Envir.RISK.MOE.data, aes(x = Chemical.Name, y = log10(MOE_med), xend = Chemical.Name, yend = log10(MOE_95)), size = 0.9, color = "#016FB9")+
+  geom_point(data = Envir.RISK.MOE.data, aes(x=reorder(Chemical.Name, -order), y=MOE_med, shape = `Sensitive endpoint`), stat = "identity", size = 2.5, color = "#016FB9") +
+  geom_point(data = Envir.RISK.MOE.data, aes(x=Chemical.Name, y=MOE_95, shape = `Sensitive endpoint`), stat = "identity", size = 2.5, color = "#016FB9") +
+  geom_segment(data = Envir.RISK.MOE.data, aes(x = Chemical.Name, y = MOE_med, xend = Chemical.Name, yend = MOE_95), size = 0.9, color = "#016FB9")+
   
   scale_shape_manual(values = c(16, 17, 15, 18))+
-  ylim(-4, 15)+
+  scale_y_log10(lim = c(1E-4, 1E+10),
+                breaks = trans_breaks("log10", function(x) 10^x, n = 6),
+                labels = trans_format("log10", math_format(10^.x))) +
   theme_bw()+
   coord_flip()+
-  labs(x = "", y = "log10(MOE)")+
+  labs(x = "", y = "Margin of Exposure")+
   ggtitle("B") + 
   theme(text=element_text(family="sans", face="plain", color="#000000", size=10),
         panel.grid = element_blank(),
         panel.grid.major.y = element_line(color = "gray", linetype = 3),
         panel.border = element_rect(size = 1.2),
-        legend.position = c(0.84, 0.3),  
+        legend.position = c(0.155, 0.313),  
         legend.title = element_text(color = "black", face = "bold", size=10),
         legend.text = element_text(color = "black", face = "bold", size=8),
         legend.box.background = element_rect(colour = "black"),
@@ -1693,7 +1695,7 @@ ggplot()+
         legend.key.size = unit(0.5, 'cm'),
         axis.ticks = element_line(color = "black"),
         axis.title = element_text(color = "black", face = "bold", size=15),
-        axis.text.x = element_text(color = "black", face = "bold", size=12),
+        axis.text.x = element_text(color = "black", size=12),
         axis.text.y = element_blank(),
         plot.title = element_text(face="bold", size=18))
 
