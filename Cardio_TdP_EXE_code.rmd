@@ -2,6 +2,7 @@
 title: "Cardio_TdP_EXE_code"
 author: "Hsing-Chieh Lin"
 date: "2023-04-05"
+updated date: "2023-10-19"
 output: html_document
 ---
 
@@ -17,12 +18,15 @@ library(tibble)
 library(scales)
 library(httk)
 library(plyr)
+library(ggforce)
+library(GGally)
+library(tidyr)
 if(!dir.exists("outputs")) dir.create("outputs")
 if(!dir.exists("plots")) dir.create("plots")
 ```
 
 
-```{r Example plot for Dose-response model}
+```{r Example plot for Dose-response model - Figure 2}
 Model.list <- c("A", "B", "C")
 Che.num.list <- c(6, 17)
 Che.name.list <- c("Disopyramide phosphate", "Cisapride monohydrate")
@@ -61,13 +65,13 @@ for(i in 1:3){
                                y_UB = apply(DR_frame, 1, function(x) quantile(x, probs = 0.95)),
                                y_LB = apply(DR_frame, 1, function(x) quantile(x, probs = 0.05)),
                                Chemical.num = Che.name.list[j], #""Disopyramide phosphate
-                               Dataset = Model)
+                               Dataset = paste("Design", Model))
     
     DR_obs_frame <- data.frame(x = x,
                                y = ys*scale_factor,
                                Chemical.num = Che.name.list[j],
                                rep = cell,
-                               Dataset = Model)
+                               Dataset = paste("Design",Model))
     
     DR_sim_frame_all <- rbind(DR_sim_frame_all, DR_sim_frame)
     DR_obs_frame_all <- rbind(DR_obs_frame_all, DR_obs_frame)
@@ -78,14 +82,13 @@ for(i in 1:3){
 DR_obs_frame_all$rep <- factor(DR_obs_frame_all$rep)
 
 DR_obs_frame_all$x[which(DR_obs_frame_all$x == 0)] <- 0.0001
-
-tiff(width = 6, height = 5.5, "plots/Figure 2.tiff", units = "in", res=400)
+Figure.2 <- 
 ggplot()+
   #geom_ribbon(data = DR_sim_frame_all, aes(x = x_sim, ymin = y_LB, ymax = y_UB), fill = "lightgray") +
   geom_line(data = DR_sim_frame_all, aes(x = log10(x_sim), y = y_med), color = "#B1BDBF", size = 1.1, linetype = 1)+
   geom_point(data = DR_obs_frame_all, aes(x = log10(x), y = y, color = rep), size = 2.2, alpha = 0.8)+
   facet_grid(Dataset~Chemical.num, scales = "free")+
-  xlab("Concentration") +
+  xlab(expression(paste("Concentration (", mu, "M)"))) +
   ylab("Decay-rise ratio")+
   #coord_cartesian(ylim = c(0, 20))+
   scale_x_continuous(lim = c(-4, 2),
@@ -97,14 +100,21 @@ ggplot()+
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(size = 12,color = "black", face = "bold"),
-        axis.text = element_text(size = 10,color = "black", face = "bold"),
-        strip.text = element_text(size = 12, color = "black", face = "bold"))
+        axis.title = element_text(size = 14,color = "black"),
+        axis.text = element_text(size = 11,color = "black"),
+        strip.text = element_text(size = 14, color = "black"))
+
+jpeg(width = 6, height = 5.5, "plots/Figure 2.jpeg", units = "in", res=600)
+Figure.2
+dev.off()
+
+pdf(width = 6, height = 5.5, "plots/Figure 2.pdf")
+Figure.2
 dev.off()
 ```
 
 
-```{r Model A - using POD data from 1 ind without replicates}
+```{r Model A - using POD data from 1 ind without replicates - Figure S1}
 # Note: Need to record the sensitivity, specificity in the file "data/Summary_sen_spe.csv", and AUC of ROC in the file "data/Summary_ROC.csv" while doing analysis
 Dataset.A <- read.csv("data/POD_Dataset I_Design A.csv") # rep notice
 
@@ -140,16 +150,15 @@ ggplot(BMD50_drug_logit_data_A)+
   ggtitle("A") +
   xlab("Predictor") + ylab("Probability") +
   theme_bw()+
-  theme(text=element_text(family="sans", face="plain", color="#000000", size=10, hjust=0.5, vjust=0.5),
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=12, hjust=0.5, vjust=0.5),
         panel.grid = element_blank(),
         legend.position = "none",
         panel.grid.minor = element_blank(),
         panel.border = element_rect(size = 1.2),
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold"),
-        axis.text = element_text(color = "black", face = "bold"),
-        strip.text = element_text(size=10, face = "bold"),
-        plot.title = element_text(face="bold", size=15))
+        axis.title = element_text(color = "black", size=14),
+        axis.text = element_text(color = "black", size=12),
+        plot.title = element_text(face="bold", size=16))
 
 
 # SSA plot
@@ -183,18 +192,17 @@ ggplot(SSA.relationship.All.plot) +
   labs(x="Thresholds", y="Probability", color = "") +
   #annotate(geom="text", x=0.4, y=1, color = "red", label=paste("Threshold = ", round(Threshold, digits = 3), sep="")) + 
   theme_bw() + 
-  theme(text=element_text(family="sans", face="plain", color="#000000", size=10, hjust=0.5, vjust=0.5),
+ theme(text=element_text(family="sans", face="plain", color="#000000", size=12, hjust=0.5, vjust=0.5),
         panel.grid = element_blank(),
-        legend.position = c(0.25, 0.3),
-        legend.text = element_text(color = "black", face = "bold"),
+        legend.position = c(0.3, 0.3),
+        legend.text = element_text(color = "black", size=11),
         legend.background = element_rect(fill = "#00000000"),
         panel.grid.minor = element_blank(),
         panel.border = element_rect(size = 1.2),
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold"),
-        axis.text = element_text(color = "black", face = "bold"),
-        strip.text = element_text(size=10, face = "bold"),
-        plot.title = element_text(face="bold", size=15))
+        axis.title = element_text(color = "black", size=14),
+        axis.text = element_text(color = "black", size=12),
+        plot.title = element_text(face="bold", size=16))
 
 
 # ROC plot
@@ -204,22 +212,21 @@ Fig.ROC <-
 ggroc(roc.curve, colour = "#5964FF", size = 1.3) +
   geom_abline(slope=1, intercept=1) + 
   annotate(geom="point", x = Specificity, y = Sensitivity, color = "red", size = 2.5) + 
-  annotate(geom="text", x = 0.25, y = 0.25, label=paste0("AUC = ", auc, sep="")) +
+  annotate(geom="text", x = 0.25, y = 0.25, label=paste0("AUC = ", auc, sep=""), size = 4.5) +
   ggtitle("C") +
   labs(x="Specificity", y="Sensitivity") +
   theme_bw() + 
-  theme(text=element_text(family="sans", face="plain", color="#000000", size=10, hjust=0.5, vjust=0.5),
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=12, hjust=0.5, vjust=0.5),
         panel.grid = element_blank(),
         legend.position = c(0.6, 0.20),
-        legend.text = element_text(color = "black", face = "bold"),
+        legend.text = element_text(color = "black"),
         legend.background = element_rect(fill = "#00000000"),
         panel.grid.minor = element_blank(),
         panel.border = element_rect(size = 1.2),
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold"),
-        axis.text = element_text(color = "black", face = "bold"),
-        strip.text = element_text(size=10, face = "bold"),
-        plot.title = element_text(face="bold", size=15))
+        axis.title = element_text(color = "black", size=14),
+        axis.text = element_text(color = "black", size=12),
+        plot.title = element_text(face="bold", size=16))
 
 
 # --------------- Predict risk itself --------------- 
@@ -262,23 +269,24 @@ ggplot(Predicted.risk.results_A, aes(x=reorder(Chemical.Name, -order), y=Pred.Td
   ggtitle("D") +
   coord_flip()+
   theme_bw() + 
-  theme(text=element_text(family="sans", face="plain", color="#000000", size=10),
-        title = element_text(color = "black", face = "bold", size=10),
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=12),
         panel.grid = element_blank(),
         panel.grid.major.y = element_line(color = "gray", linetype = 3),
         panel.border = element_rect(size = 1.2),
-        legend.title = element_text(color = "black", face = "bold"),
+        legend.title = element_text(color = "black"),
         legend.position = "none", #c(0.85, 0.8)
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold", size=10),
-        axis.text.y = element_text(color = "black", face = "bold"),
-        axis.text.x = element_text(color = "black", face = "bold"),
-        plot.title = element_text(face="bold", size=15))
+        axis.title = element_text(color = "black", size=14),
+        axis.text = element_text(color = "black", size=12),
+        plot.title = element_text(face="bold", size=16))
 
-tiff(width = 10, height = 10, "plots/Figure S1.tiff", units = "in", res=400)
+jpeg(width = 10, height = 10, "plots/Figure S1.jpeg", units = "in", res=600)
 ((Fig.MODEL / Fig.SSA / Fig.ROC) | Fig.RISK) + plot_layout(widths = c(1/2, 1/2))
 dev.off()
 
+pdf(width = 10, height = 10, "plots/Figure S1.pdf")
+((Fig.MODEL / Fig.SSA / Fig.ROC) | Fig.RISK) + plot_layout(widths = c(1/2, 1/2))
+dev.off()
 
 # --------------- Internal cross-validation --------------- 
 BMD50_drug_logit_data_A_croval   <- Dataset.A[which(Dataset.A$Drug_lable == "Drug"), ]
@@ -386,20 +394,20 @@ ggplot(Predicted.risk.results_A_croval, aes(x=reorder(Chemical.Name, -order), y=
             ymax = range(Predicted.risk.results_A_croval$Potential.threshold)[2], fill = "#FFF3C1", color = "#FFF3C1") + 
   geom_point(stat = "identity", size = 2.5) +
   geom_hline(yintercept = median(Predicted.risk.results_A_croval$Potential.threshold), color = "red", linetype = 2) +
-  annotate(geom="text", x=50, y=0.7, label=paste("Accuracy = ", round(Accuracy, digits = 3), 
-                                                  " (", round(range(Predicted.risk.results_A_croval$Accuracy)[1], digits = 3), " - ",
-                                                  round(range(Predicted.risk.results_A_croval$Accuracy)[2], digits = 3), ")", sep="")) + 
-  annotate(geom="text", x=48, y=0.7, label=paste("Sensitivity = ", round(Sensitivity, digits = 3), 
-                                                   " (", round(range(Predicted.risk.results_A_croval$Sensitivity)[1], digits = 3), " - ",
-                                                   round(range(Predicted.risk.results_A_croval$Sensitivity)[2], digits = 3), ")", sep="")) + 
-  annotate(geom="text", x=46, y=0.7, label=paste("Specificity = ", round(Specificity, digits = 3), 
-                                                  " (", round(range(Predicted.risk.results_A_croval$Specificity)[1], digits = 3), " - ",
-                                                  round(range(Predicted.risk.results_A_croval$Specificity)[2], digits = 3), ")", sep="")) + 
-  annotate(geom="text", x=44, y=0.7, label=paste("Threshold = ", round(median(Predicted.risk.results_A_croval$Potential.threshold), digits = 3), 
-                                                   " (", round(range(Predicted.risk.results_A_croval$Potential.threshold)[1], digits = 3), " - ",
-                                                   round(range(Predicted.risk.results_A_croval$Potential.threshold)[2], digits = 3), ")", sep="")) + 
-  annotate(geom="text", x=42, y=0.7, label=paste("AUC of ROC = ", round(range(Predicted.risk.results_A_croval$AUC)[1], digits = 3), " - ",
-                                                  round(range(Predicted.risk.results_A_croval$AUC)[2], digits = 3), sep="")) +
+  #annotate(geom="text", x=50, y=0.7, label=paste("Accuracy = ", round(Accuracy, digits = 3), 
+  #                                                " (", round(range(Predicted.risk.results_A_croval$Accuracy)[1], digits = 3), " - ",
+  #                                                round(range(Predicted.risk.results_A_croval$Accuracy)[2], digits = 3), ")", sep="")) + 
+  #annotate(geom="text", x=48, y=0.7, label=paste("Sensitivity = ", round(Sensitivity, digits = 3), 
+  #                                                 " (", round(range(Predicted.risk.results_A_croval$Sensitivity)[1], digits = 3), " - ",
+  #                                                 round(range(Predicted.risk.results_A_croval$Sensitivity)[2], digits = 3), ")", sep="")) + 
+  #annotate(geom="text", x=46, y=0.7, label=paste("Specificity = ", round(Specificity, digits = 3), 
+  #                                                " (", round(range(Predicted.risk.results_A_croval$Specificity)[1], digits = 3), " - ",
+  #                                                round(range(Predicted.risk.results_A_croval$Specificity)[2], digits = 3), ")", sep="")) + 
+  #annotate(geom="text", x=44, y=0.7, label=paste("Threshold = ", round(median(Predicted.risk.results_A_croval$Potential.threshold), digits = 3), 
+  #                                                 " (", round(range(Predicted.risk.results_A_croval$Potential.threshold)[1], digits = 3), " - ",
+  #                                                 round(range(Predicted.risk.results_A_croval$Potential.threshold)[2], digits = 3), ")", sep="")) + 
+  #annotate(geom="text", x=42, y=0.7, label=paste("AUC of ROC = ", round(range(Predicted.risk.results_A_croval$AUC)[1], digits = 3), " - ",
+  #                                                round(range(Predicted.risk.results_A_croval$AUC)[2], digits = 3), sep="")) +
   scale_y_continuous(breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), limits = c(0, 1))+
   scale_color_manual(values = c("#5964FF", "#FF5964"))+
   scale_shape_manual(values = c(1, 16)) + 
@@ -411,18 +419,17 @@ ggplot(Predicted.risk.results_A_croval, aes(x=reorder(Chemical.Name, -order), y=
        y= "Probability of positive for TdP")+
   coord_flip()+
   theme_bw() + 
-  theme(text=element_text(family="sans", face="plain", color="#000000", size=10),
-        title = element_text(color = "black", face = "bold", size=12),
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=12),
         panel.grid = element_blank(),
         panel.grid.major.y = element_line(color = "gray", linetype = 3),
         panel.border = element_rect(size = 1.2),
-        legend.title = element_text(color = "black", face = "bold"),
+        legend.title = element_text(color = "black"),
         legend.position = "none", #c(0.85, 0.8)
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold", size=12),
-        axis.text.y = element_text(color = "black", face = "bold"),
-        axis.text.x = element_text(color = "black", face = "bold"),
-        plot.title = element_text(face="bold", size=15))
+        axis.title = element_text(color = "black", size=14),
+        axis.text = element_text(color = "black", size=12),
+        plot.title = element_text(face="bold", size=16))
+
 
 
 # --------------- External validation ---------------
@@ -489,17 +496,17 @@ ggplot(Predicted.risk.results_A_extval, aes(x=reorder(Chemical.Name, -order), y=
   ggtitle("A. Model A") +
   #coord_flip()+
   theme_bw() + 
-  theme(text=element_text(family="sans", face="plain", color="#000000"),
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=12),
+        title = element_text(color = "black", size=12),
         panel.grid = element_blank(),
         panel.grid.major.x = element_line(color = "gray", linetype = 3),
         panel.border = element_rect(size = 1.2),
-        legend.title = element_text(color = "black", face = "bold"),
         legend.position = "none", #c(0.85, 0.8)
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold", size=12),
-        axis.text.y = element_text(color = "black", face = "bold"),
-        axis.text.x = element_text(color = "black", face = "bold", angle = 65, hjust=1),
-        plot.title = element_text(face="bold", size=15))
+        axis.title = element_text(color = "black", size=16),
+        axis.text.y = element_text(color = "black", size=12),
+        axis.text.x = element_text(color = "black", angle = 65, hjust=1, size=10),
+        plot.title = element_text(face="bold", size=20))
 
 # ROC plot
 roc.curve <- roc(BMD50_drug_logit_data_A_extval$QT.TdP_Positive_k_c, BMD50_drug_logit_data_A_extval$Pred.TdP.risk.5Pheno)
@@ -511,27 +518,26 @@ ggroc(roc.curve, colour = "#5964FF", size = 1.3) +
   annotate(geom="text", x = 0.25, y = 0.25, label=paste0("AUC = ", auc, sep="")) +
   labs(x="Specificity", y="Sensitivity") +
   theme_bw() + 
-  theme(text=element_text(family="sans", face="plain", color="#000000", size=8, hjust=0.5, vjust=0.5),
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=12, hjust=0.5, vjust=0.5),
         panel.grid = element_blank(),
         legend.position = c(0.6, 0.20),
-        legend.text = element_text(color = "black", face = "bold"),
+        legend.text = element_text(color = "black"),
         legend.background = element_rect(fill = "#00000000"),
         panel.grid.minor = element_blank(),
         panel.border = element_rect(size = 1.2),
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold"),
-        axis.text = element_text(color = "black", face = "bold"),
-        strip.text = element_text(size=10, face = "bold"))
+        axis.title = element_text(color = "black"),
+        axis.text = element_text(color = "black"))
 
 Fig.RISK.extval.ModelA <-
 ggdraw() +
   draw_plot(Fig.RISK.extval.ModelA.main) +
-  draw_plot(Fig.ROC.extval.ModelA, x = 0.8, y = .65, width = .15, height = .28)
+  draw_plot(Fig.ROC.extval.ModelA, x = 0.8, y = .65, width = .12, height = .28)
 
 ```
 
 
-```{r Model B - using POD data from 1 ind with 5 replicates}
+```{r Model B - using POD data from 1 ind with 5 replicates - Figure S2}
 # Note: Need to record the sensitivity, specificity in the file "data/Summary_sen_spe.csv", and AUC of ROC in the file "data/Summary_ROC.csv" while doing analysis
 Dataset.B <- read.csv("data/POD_Dataset I_Design B.csv") # rep notice
 
@@ -567,16 +573,15 @@ ggplot(BMD50_drug_logit_data_B)+
   ggtitle("A") +
   xlab("Predictor") + ylab("Probability") +
   theme_bw()+
-  theme(text=element_text(family="sans", face="plain", color="#000000", size=10, hjust=0.5, vjust=0.5),
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=12, hjust=0.5, vjust=0.5),
         panel.grid = element_blank(),
         legend.position = "none",
         panel.grid.minor = element_blank(),
         panel.border = element_rect(size = 1.2),
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold"),
-        axis.text = element_text(color = "black", face = "bold"),
-        strip.text = element_text(size=10, face = "bold"),
-        plot.title = element_text(face="bold", size=15))
+        axis.title = element_text(color = "black", size=14),
+        axis.text = element_text(color = "black", size=12),
+        plot.title = element_text(face="bold", size=16))
 
 
 # SSA plot
@@ -610,18 +615,17 @@ ggplot(SSA.relationship.All.plot) +
   labs(x="Thresholds", y="Probability", color = "") +
   #annotate(geom="text", x=0.4, y=1, color = "red", label=paste("Threshold = ", round(Threshold, digits = 3), sep="")) + 
   theme_bw() + 
-  theme(text=element_text(family="sans", face="plain", color="#000000", size=10, hjust=0.5, vjust=0.5),
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=12, hjust=0.5, vjust=0.5),
         panel.grid = element_blank(),
-        legend.position = c(0.25, 0.3),
-        legend.text = element_text(color = "black", face = "bold"),
+        legend.position = c(0.3, 0.3),
+        legend.text = element_text(color = "black", size=11),
         legend.background = element_rect(fill = "#00000000"),
         panel.grid.minor = element_blank(),
         panel.border = element_rect(size = 1.2),
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold"),
-        axis.text = element_text(color = "black", face = "bold"),
-        strip.text = element_text(size=10, face = "bold"),
-        plot.title = element_text(face="bold", size=15))
+        axis.title = element_text(color = "black", size=14),
+        axis.text = element_text(color = "black", size=12),
+        plot.title = element_text(face="bold", size=16))
 
 
 # ROC plot
@@ -631,22 +635,21 @@ Fig.ROC <-
 ggroc(roc.curve, colour = "#5964FF", size = 1.3) +
   geom_abline(slope=1, intercept=1) + 
   annotate(geom="point", x = Specificity, y = Sensitivity, color = "red", size = 2.5) + 
-  annotate(geom="text", x = 0.25, y = 0.25, label=paste0("AUC = ", auc, sep="")) +
+  annotate(geom="text", x = 0.25, y = 0.25, label=paste0("AUC = ", auc, sep=""), size = 4.5) +
   ggtitle("C") +
   labs(x="Specificity", y="Sensitivity") +
   theme_bw() + 
-  theme(text=element_text(family="sans", face="plain", color="#000000", size=10, hjust=0.5, vjust=0.5),
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=12, hjust=0.5, vjust=0.5),
         panel.grid = element_blank(),
         legend.position = c(0.6, 0.20),
-        legend.text = element_text(color = "black", face = "bold"),
+        legend.text = element_text(color = "black"),
         legend.background = element_rect(fill = "#00000000"),
         panel.grid.minor = element_blank(),
         panel.border = element_rect(size = 1.2),
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold"),
-        axis.text = element_text(color = "black", face = "bold"),
-        strip.text = element_text(size=10, face = "bold"),
-        plot.title = element_text(face="bold", size=15))
+        axis.title = element_text(color = "black", size=14),
+        axis.text = element_text(color = "black", size=12),
+        plot.title = element_text(face="bold", size=16))
 
 
 # --------------- Predict risk itself --------------- 
@@ -689,23 +692,24 @@ ggplot(Predicted.risk.results_B, aes(x=reorder(Chemical.Name, -order), y=Pred.Td
   ggtitle("D") +
   coord_flip()+
   theme_bw() + 
-  theme(text=element_text(family="sans", face="plain", color="#000000", size=10),
-        title = element_text(color = "black", face = "bold", size=10),
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=12),
         panel.grid = element_blank(),
         panel.grid.major.y = element_line(color = "gray", linetype = 3),
         panel.border = element_rect(size = 1.2),
-        legend.title = element_text(color = "black", face = "bold"),
+        legend.title = element_text(color = "black"),
         legend.position = "none", #c(0.85, 0.8)
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold", size=10),
-        axis.text.y = element_text(color = "black", face = "bold"),
-        axis.text.x = element_text(color = "black", face = "bold"),
-        plot.title = element_text(face="bold", size=15))
+        axis.title = element_text(color = "black", size=14),
+        axis.text = element_text(color = "black", size=12),
+        plot.title = element_text(face="bold", size=16))
 
-tiff(width = 10, height = 10, "plots/Figure S2.tiff", units = "in", res=400)
+jpeg(width = 10, height = 10, "plots/Figure S2.jpeg", units = "in", res=600)
 ((Fig.MODEL / Fig.SSA / Fig.ROC) | Fig.RISK) + plot_layout(widths = c(1/2, 1/2))
 dev.off()
 
+pdf(width = 10, height = 10, "plots/Figure S2.pdf")
+((Fig.MODEL / Fig.SSA / Fig.ROC) | Fig.RISK) + plot_layout(widths = c(1/2, 1/2))
+dev.off()
 
 # --------------- Internal cross-validation --------------- 
 BMD50_drug_logit_data_B_croval   <- Dataset.B[which(Dataset.B$Drug_lable == "Drug"), ]
@@ -813,20 +817,20 @@ ggplot(Predicted.risk.results_B_croval, aes(x=reorder(Chemical.Name, -order), y=
             ymax = range(Predicted.risk.results_B_croval$Potential.threshold)[2], fill = "#FFF3C1", color = "#FFF3C1") + 
   geom_point(stat = "identity", size = 2.5) +
   geom_hline(yintercept = median(Predicted.risk.results_B_croval$Potential.threshold), color = "red", linetype = 2) +
-  annotate(geom="text", x=50, y=0.7, label=paste("Accuracy = ", round(Accuracy, digits = 3), 
-                                                  " (", round(range(Predicted.risk.results_B_croval$Accuracy)[1], digits = 3), " - ",
-                                                  round(range(Predicted.risk.results_B_croval$Accuracy)[2], digits = 3), ")", sep="")) + 
-  annotate(geom="text", x=48, y=0.7, label=paste("Sensitivity = ", round(Sensitivity, digits = 3), 
-                                                   " (", round(range(Predicted.risk.results_B_croval$Sensitivity)[1], digits = 3), " - ",
-                                                   round(range(Predicted.risk.results_B_croval$Sensitivity)[2], digits = 3), ")", sep="")) + 
-  annotate(geom="text", x=46, y=0.7, label=paste("Specificity = ", round(Specificity, digits = 3), 
-                                                  " (", round(range(Predicted.risk.results_B_croval$Specificity)[1], digits = 3), " - ",
-                                                  round(range(Predicted.risk.results_B_croval$Specificity)[2], digits = 3), ")", sep="")) + 
-  annotate(geom="text", x=44, y=0.7, label=paste("Threshold = ", round(median(Predicted.risk.results_B_croval$Potential.threshold), digits = 3), 
-                                                   " (", round(range(Predicted.risk.results_B_croval$Potential.threshold)[1], digits = 3), " - ",
-                                                   round(range(Predicted.risk.results_B_croval$Potential.threshold)[2], digits = 3), ")", sep="")) + 
-  annotate(geom="text", x=42, y=0.7, label=paste("AUC of ROC = ", round(range(Predicted.risk.results_B_croval$AUC)[1], digits = 3), " - ",
-                                                  round(range(Predicted.risk.results_B_croval$AUC)[2], digits = 3), sep="")) +
+  #annotate(geom="text", x=50, y=0.7, label=paste("Accuracy = ", round(Accuracy, digits = 3), 
+  #                                                " (", round(range(Predicted.risk.results_B_croval$Accuracy)[1], digits = 3), " - ",
+  #                                                round(range(Predicted.risk.results_B_croval$Accuracy)[2], digits = 3), ")", sep="")) + 
+  #annotate(geom="text", x=48, y=0.7, label=paste("Sensitivity = ", round(Sensitivity, digits = 3), 
+  #                                                 " (", round(range(Predicted.risk.results_B_croval$Sensitivity)[1], digits = 3), " - ",
+  #                                                 round(range(Predicted.risk.results_B_croval$Sensitivity)[2], digits = 3), ")", sep="")) + 
+  #annotate(geom="text", x=46, y=0.7, label=paste("Specificity = ", round(Specificity, digits = 3), 
+  #                                                " (", round(range(Predicted.risk.results_B_croval$Specificity)[1], digits = 3), " - ",
+  #                                                round(range(Predicted.risk.results_B_croval$Specificity)[2], digits = 3), ")", sep="")) + 
+  #annotate(geom="text", x=44, y=0.7, label=paste("Threshold = ", round(median(Predicted.risk.results_B_croval$Potential.threshold), digits = 3), 
+  #                                                 " (", round(range(Predicted.risk.results_B_croval$Potential.threshold)[1], digits = 3), " - ",
+  #                                                 round(range(Predicted.risk.results_B_croval$Potential.threshold)[2], digits = 3), ")", sep="")) + 
+  #annotate(geom="text", x=42, y=0.7, label=paste("AUC of ROC = ", round(range(Predicted.risk.results_B_croval$AUC)[1], digits = 3), " - ",
+  #                                                round(range(Predicted.risk.results_B_croval$AUC)[2], digits = 3), sep="")) +
   scale_y_continuous(breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), limits = c(0, 1))+
   scale_color_manual(values = c("#5964FF", "#FF5964"))+
   scale_shape_manual(values = c(1, 16)) + 
@@ -838,18 +842,17 @@ ggplot(Predicted.risk.results_B_croval, aes(x=reorder(Chemical.Name, -order), y=
        y= "Probability of positive for TdP")+
   coord_flip()+
   theme_bw() + 
-  theme(text=element_text(family="sans", face="plain", color="#000000", size=10),
-        title = element_text(color = "black", face = "bold", size=12),
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=12),
         panel.grid = element_blank(),
         panel.grid.major.y = element_line(color = "gray", linetype = 3),
         panel.border = element_rect(size = 1.2),
-        legend.title = element_text(color = "black", face = "bold"),
+        legend.title = element_text(color = "black"),
         legend.position = "none", #c(0.85, 0.8)
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold", size=12),
-        axis.text.y = element_text(color = "black", face = "bold"),
-        axis.text.x = element_text(color = "black", face = "bold"),
-        plot.title = element_text(face="bold", size=15))
+        axis.title = element_text(color = "black", size=14),
+        axis.text = element_text(color = "black", size=12),
+        plot.title = element_text(face="bold", size=16))
+
 
 
 # --------------- External validation ---------------
@@ -916,17 +919,17 @@ ggplot(Predicted.risk.results_B_extval, aes(x=reorder(Chemical.Name, -order), y=
   ggtitle("B. Model B") +
   #coord_flip()+
   theme_bw() + 
-  theme(text=element_text(family="sans", face="plain", color="#000000"),
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=12),
+        title = element_text(color = "black", size=12),
         panel.grid = element_blank(),
         panel.grid.major.x = element_line(color = "gray", linetype = 3),
         panel.border = element_rect(size = 1.2),
-        legend.title = element_text(color = "black", face = "bold"),
         legend.position = "none", #c(0.85, 0.8)
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold", size=12),
-        axis.text.y = element_text(color = "black", face = "bold"),
-        axis.text.x = element_text(color = "black", face = "bold", angle = 65, hjust=1),
-        plot.title = element_text(face="bold", size=15))
+        axis.title = element_text(color = "black", size=16),
+        axis.text.y = element_text(color = "black", size=12),
+        axis.text.x = element_text(color = "black", angle = 65, hjust=1, size=10),
+        plot.title = element_text(face="bold", size=20))
 
 # ROC plot
 roc.curve <- roc(BMD50_drug_logit_data_B_extval$QT.TdP_Positive_k_c, BMD50_drug_logit_data_B_extval$Pred.TdP.risk.5Pheno)
@@ -938,27 +941,26 @@ ggroc(roc.curve, colour = "#5964FF", size = 1.3) +
   annotate(geom="text", x = 0.25, y = 0.25, label=paste0("AUC = ", auc, sep="")) +
   labs(x="Specificity", y="Sensitivity") +
   theme_bw() + 
-  theme(text=element_text(family="sans", face="plain", color="#000000", size=8, hjust=0.5, vjust=0.5),
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=12, hjust=0.5, vjust=0.5),
         panel.grid = element_blank(),
         legend.position = c(0.6, 0.20),
-        legend.text = element_text(color = "black", face = "bold"),
+        legend.text = element_text(color = "black"),
         legend.background = element_rect(fill = "#00000000"),
         panel.grid.minor = element_blank(),
         panel.border = element_rect(size = 1.2),
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold"),
-        axis.text = element_text(color = "black", face = "bold"),
-        strip.text = element_text(size=10, face = "bold"))
+        axis.title = element_text(color = "black"),
+        axis.text = element_text(color = "black"))
 
 Fig.RISK.extval.ModelB <-
 ggdraw() +
   draw_plot(Fig.RISK.extval.ModelB.main) +
-  draw_plot(Fig.ROC.extval.ModelB, x = 0.8, y = .65, width = .15, height = .28)
+  draw_plot(Fig.ROC.extval.ModelB, x = 0.8, y = .65, width = .12, height = .28)
 
 ```
 
 
-```{r Model C - using POD data from 5 ind with 1 replicates}
+```{r Model C - using POD data from 5 ind with 1 replicates - Figure 3}
 # Note: Need to record the sensitivity, specificity in the file "data/Summary_sen_spe.csv", and AUC of ROC in the file "data/Summary_ROC.csv" while doing analysis
 Dataset.C <- read.csv("data/POD_Dataset I_Design C.csv") # rep notice
 
@@ -994,16 +996,15 @@ ggplot(BMD50_drug_logit_data_C)+
   ggtitle("A") +
   xlab("Predictor") + ylab("Probability") +
   theme_bw()+
-  theme(text=element_text(family="sans", face="plain", color="#000000", size=10, hjust=0.5, vjust=0.5),
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=12, hjust=0.5, vjust=0.5),
         panel.grid = element_blank(),
         legend.position = "none",
         panel.grid.minor = element_blank(),
         panel.border = element_rect(size = 1.2),
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold"),
-        axis.text = element_text(color = "black", face = "bold"),
-        strip.text = element_text(size=10, face = "bold"),
-        plot.title = element_text(face="bold", size=15))
+        axis.title = element_text(color = "black", size=14),
+        axis.text = element_text(color = "black", size=12),
+        plot.title = element_text(face="bold", size=16))
 
 
 # SSA plot
@@ -1037,18 +1038,17 @@ ggplot(SSA.relationship.All.plot) +
   labs(x="Thresholds", y="Probability", color = "") +
   #annotate(geom="text", x=0.4, y=1, color = "red", label=paste("Threshold = ", round(Threshold, digits = 3), sep="")) + 
   theme_bw() + 
-  theme(text=element_text(family="sans", face="plain", color="#000000", size=10, hjust=0.5, vjust=0.5),
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=12, hjust=0.5, vjust=0.5),
         panel.grid = element_blank(),
         legend.position = c(0.5, 0.3),
-        legend.text = element_text(color = "black", face = "bold"),
+        legend.text = element_text(color = "black", size=11),
         legend.background = element_rect(fill = "#00000000"),
         panel.grid.minor = element_blank(),
         panel.border = element_rect(size = 1.2),
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold"),
-        axis.text = element_text(color = "black", face = "bold"),
-        strip.text = element_text(size=10, face = "bold"),
-        plot.title = element_text(face="bold", size=15))
+        axis.title = element_text(color = "black", size=14),
+        axis.text = element_text(color = "black", size=12),
+        plot.title = element_text(face="bold", size=16))
 
 
 # ROC plot
@@ -1058,22 +1058,21 @@ Fig.ROC <-
 ggroc(roc.curve, colour = "#5964FF", size = 1.3) +
   geom_abline(slope=1, intercept=1) + 
   annotate(geom="point", x = Specificity, y = Sensitivity, color = "red", size = 2.5) + 
-  annotate(geom="text", x = 0.25, y = 0.25, label=paste0("AUC = ", auc, sep="")) +
+  annotate(geom="text", x = 0.25, y = 0.25, label=paste0("AUC = ", auc, sep=""), size=4.5) +
   ggtitle("C") +
   labs(x="Specificity", y="Sensitivity") +
   theme_bw() + 
-  theme(text=element_text(family="sans", face="plain", color="#000000", size=10, hjust=0.5, vjust=0.5),
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=12, hjust=0.5, vjust=0.5),
         panel.grid = element_blank(),
         legend.position = c(0.6, 0.20),
-        legend.text = element_text(color = "black", face = "bold"),
+        legend.text = element_text(color = "black"),
         legend.background = element_rect(fill = "#00000000"),
         panel.grid.minor = element_blank(),
         panel.border = element_rect(size = 1.2),
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold"),
-        axis.text = element_text(color = "black", face = "bold"),
-        strip.text = element_text(size=10, face = "bold"),
-        plot.title = element_text(face="bold", size=15))
+        axis.title = element_text(color = "black", size=14),
+        axis.text = element_text(color = "black", size=12),
+        plot.title = element_text(face="bold", size=16))
 
 
 # --------------- Predict risk itself --------------- 
@@ -1116,23 +1115,24 @@ ggplot(Predicted.risk.results_C, aes(x=reorder(Chemical.Name, -order), y=Pred.Td
   ggtitle("D") +
   coord_flip()+
   theme_bw() + 
-  theme(text=element_text(family="sans", face="plain", color="#000000", size=10),
-        title = element_text(color = "black", face = "bold", size=10),
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=12),
         panel.grid = element_blank(),
         panel.grid.major.y = element_line(color = "gray", linetype = 3),
         panel.border = element_rect(size = 1.2),
-        legend.title = element_text(color = "black", face = "bold"),
+        legend.title = element_text(color = "black"),
         legend.position = "none", #c(0.85, 0.8)
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold", size=10),
-        axis.text.y = element_text(color = "black", face = "bold"),
-        axis.text.x = element_text(color = "black", face = "bold"),
-        plot.title = element_text(face="bold", size=15))
+        axis.title = element_text(color = "black", size=14),
+        axis.text = element_text(color = "black", size=12),
+        plot.title = element_text(face="bold", size=16))
 
-tiff(width = 10, height = 10, "plots/Figure 3.tiff", units = "in", res=400)
+jpeg(width = 10, height = 10, "plots/Figure 3.jpeg", units = "in", res=600)
 ((Fig.MODEL / Fig.SSA / Fig.ROC) | Fig.RISK) + plot_layout(widths = c(1/2, 1/2))
 dev.off()
 
+pdf(width = 10, height = 10, "plots/Figure 3.pdf")
+((Fig.MODEL / Fig.SSA / Fig.ROC) | Fig.RISK) + plot_layout(widths = c(1/2, 1/2))
+dev.off()
 
 # --------------- Internal cross-validation --------------- 
 BMD50_drug_logit_data_C_croval   <- Dataset.C[which(Dataset.C$Drug_lable == "Drug"), ]
@@ -1240,20 +1240,20 @@ ggplot(Predicted.risk.results_C_croval, aes(x=reorder(Chemical.Name, -order), y=
             ymax = range(Predicted.risk.results_C_croval$Potential.threshold)[2], fill = "#FFF3C1", color = "#FFF3C1") + 
   geom_point(stat = "identity", size = 2.5) +
   geom_hline(yintercept = median(Predicted.risk.results_C_croval$Potential.threshold), color = "red", linetype = 2) +
-  annotate(geom="text", x=50, y=0.7, label=paste("Accuracy = ", round(Accuracy, digits = 3), 
-                                                  " (", round(range(Predicted.risk.results_C_croval$Accuracy)[1], digits = 3), " - ",
-                                                  round(range(Predicted.risk.results_C_croval$Accuracy)[2], digits = 3), ")", sep="")) + 
-  annotate(geom="text", x=48, y=0.7, label=paste("Sensitivity = ", round(Sensitivity, digits = 3), 
-                                                   " (", round(range(Predicted.risk.results_C_croval$Sensitivity)[1], digits = 3), " - ",
-                                                   round(range(Predicted.risk.results_C_croval$Sensitivity)[2], digits = 3), ")", sep="")) + 
-  annotate(geom="text", x=46, y=0.7, label=paste("Specificity = ", round(Specificity, digits = 3), 
-                                                  " (", round(range(Predicted.risk.results_C_croval$Specificity)[1], digits = 3), " - ",
-                                                  round(range(Predicted.risk.results_C_croval$Specificity)[2], digits = 3), ")", sep="")) + 
-  annotate(geom="text", x=44, y=0.7, label=paste("Threshold = ", round(median(Predicted.risk.results_C_croval$Potential.threshold), digits = 3), 
-                                                   " (", round(range(Predicted.risk.results_C_croval$Potential.threshold)[1], digits = 3), " - ",
-                                                   round(range(Predicted.risk.results_C_croval$Potential.threshold)[2], digits = 3), ")", sep="")) + 
-  annotate(geom="text", x=42, y=0.7, label=paste("AUC of ROC = ", round(range(Predicted.risk.results_C_croval$AUC)[1], digits = 3), " - ",
-                                                  round(range(Predicted.risk.results_C_croval$AUC)[2], digits = 3), sep="")) +
+  #annotate(geom="text", x=50, y=0.7, label=paste("Accuracy = ", round(Accuracy, digits = 3), 
+  #                                                " (", round(range(Predicted.risk.results_C_croval$Accuracy)[1], digits = 3), " - ",
+  #                                                round(range(Predicted.risk.results_C_croval$Accuracy)[2], digits = 3), ")", sep="")) + 
+  #annotate(geom="text", x=48, y=0.7, label=paste("Sensitivity = ", round(Sensitivity, digits = 3), 
+  #                                                 " (", round(range(Predicted.risk.results_C_croval$Sensitivity)[1], digits = 3), " - ",
+  #                                                 round(range(Predicted.risk.results_C_croval$Sensitivity)[2], digits = 3), ")", sep="")) + 
+  #annotate(geom="text", x=46, y=0.7, label=paste("Specificity = ", round(Specificity, digits = 3), 
+  #                                                " (", round(range(Predicted.risk.results_C_croval$Specificity)[1], digits = 3), " - ",
+  #                                                round(range(Predicted.risk.results_C_croval$Specificity)[2], digits = 3), ")", sep="")) + 
+  #annotate(geom="text", x=44, y=0.7, label=paste("Threshold = ", round(median(Predicted.risk.results_C_croval$Potential.threshold), digits = 3), 
+  #                                                 " (", round(range(Predicted.risk.results_C_croval$Potential.threshold)[1], digits = 3), " - ",
+  #                                                 round(range(Predicted.risk.results_C_croval$Potential.threshold)[2], digits = 3), ")", sep="")) + 
+  #annotate(geom="text", x=42, y=0.7, label=paste("AUC of ROC = ", round(range(Predicted.risk.results_C_croval$AUC)[1], digits = 3), " - ",
+  #                                                round(range(Predicted.risk.results_C_croval$AUC)[2], digits = 3), sep="")) +
   scale_y_continuous(breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), limits = c(0, 1))+
   scale_color_manual(values = c("#5964FF", "#FF5964"))+
   scale_shape_manual(values = c(1, 16)) + 
@@ -1265,18 +1265,16 @@ ggplot(Predicted.risk.results_C_croval, aes(x=reorder(Chemical.Name, -order), y=
        y= "Probability of positive for TdP")+
   coord_flip()+
   theme_bw() + 
-  theme(text=element_text(family="sans", face="plain", color="#000000", size=10),
-        title = element_text(color = "black", face = "bold", size=12),
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=12),
         panel.grid = element_blank(),
         panel.grid.major.y = element_line(color = "gray", linetype = 3),
         panel.border = element_rect(size = 1.2),
-        legend.title = element_text(color = "black", face = "bold"),
+        legend.title = element_text(color = "black"),
         legend.position = "none", #c(0.85, 0.8)
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold", size=12),
-        axis.text.y = element_text(color = "black", face = "bold"),
-        axis.text.x = element_text(color = "black", face = "bold"),
-        plot.title = element_text(face="bold", size=15))
+        axis.title = element_text(color = "black", size=14),
+        axis.text = element_text(color = "black", size=12),
+        plot.title = element_text(face="bold", size=16))
 
 
 # --------------- External validation ---------------
@@ -1343,17 +1341,17 @@ ggplot(Predicted.risk.results_C_extval, aes(x=reorder(Chemical.Name, -order), y=
   ggtitle("C. Model C") +
   #coord_flip()+
   theme_bw() + 
-  theme(text=element_text(family="sans", face="plain", color="#000000"),
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=12),
+        title = element_text(color = "black", size=12),
         panel.grid = element_blank(),
         panel.grid.major.x = element_line(color = "gray", linetype = 3),
         panel.border = element_rect(size = 1.2),
-        legend.title = element_text(color = "black", face = "bold"),
         legend.position = "none", #c(0.85, 0.8)
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold", size=12),
-        axis.text.y = element_text(color = "black", face = "bold"),
-        axis.text.x = element_text(color = "black", face = "bold", angle = 65, hjust=1),
-        plot.title = element_text(face="bold", size=15))
+        axis.title = element_text(color = "black", size=16),
+        axis.text.y = element_text(color = "black", size=12),
+        axis.text.x = element_text(color = "black", angle = 65, hjust=1, size=10),
+        plot.title = element_text(face="bold", size=20))
 
 # ROC plot
 roc.curve <- roc(BMD50_drug_logit_data_C_extval$QT.TdP_Positive_k_c, BMD50_drug_logit_data_C_extval$Pred.TdP.risk.5Pheno)
@@ -1365,38 +1363,262 @@ ggroc(roc.curve, colour = "#5964FF", size = 1.3) +
   annotate(geom="text", x = 0.25, y = 0.25, label=paste0("AUC = ", auc, sep="")) +
   labs(x="Specificity", y="Sensitivity") +
   theme_bw() + 
-  theme(text=element_text(family="sans", face="plain", color="#000000", size=8, hjust=0.5, vjust=0.5),
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=12, hjust=0.5, vjust=0.5),
         panel.grid = element_blank(),
         legend.position = c(0.6, 0.20),
-        legend.text = element_text(color = "black", face = "bold"),
+        legend.text = element_text(color = "black"),
         legend.background = element_rect(fill = "#00000000"),
         panel.grid.minor = element_blank(),
         panel.border = element_rect(size = 1.2),
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold"),
-        axis.text = element_text(color = "black", face = "bold"),
-        strip.text = element_text(size=10, face = "bold"))
+        axis.title = element_text(color = "black"),
+        axis.text = element_text(color = "black"))
 
 Fig.RISK.extval.ModelC <-
 ggdraw() +
   draw_plot(Fig.RISK.extval.ModelC.main) +
-  draw_plot(Fig.ROC.extval.ModelC, x = 0.8, y = .65, width = .15, height = .28)
+  draw_plot(Fig.ROC.extval.ModelC, x = 0.8, y = .65, width = .12, height = .28)
 
 ```
 
 
-```{r Supplementary plots}
-tiff(width = 20, height = 9, "plots/Figure S3_CroVal.tiff", units = "in", res=400)
+```{r Supplementary plots - Figures S3 & S4}
+jpeg(width = 20, height = 11, "plots/Figure S3_CroVal_new.jpeg", units = "in", res=600)
 (Fig.RISK.croval.ModelA + Fig.RISK.croval.ModelB + Fig.RISK.croval.ModelC) + plot_layout(widths = c(1/3, 1/3, 1/3))
 dev.off()
 
-tiff(width = 20, height = 21, "plots/Figure S4_ExtVal.tiff", units = "in", res=300)
+pdf(width = 20, height = 11, "plots/Figure S3_CroVal.pdf")
+(Fig.RISK.croval.ModelA + Fig.RISK.croval.ModelB + Fig.RISK.croval.ModelC) + plot_layout(widths = c(1/3, 1/3, 1/3))
+dev.off()
+
+jpeg(width = 23, height = 20, "plots/Figure S4_ExtVal.jpeg", units = "in", res=600)
+(Fig.RISK.extval.ModelA + Fig.RISK.extval.ModelB + Fig.RISK.extval.ModelC) + plot_layout(heights = c(1/3, 1/3, 1/3))
+dev.off()
+
+pdf(width = 23, height = 20, "plots/Figure S4_ExtVal.pdf")
 (Fig.RISK.extval.ModelA + Fig.RISK.extval.ModelB + Fig.RISK.extval.ModelC) + plot_layout(heights = c(1/3, 1/3, 1/3))
 dev.off()
 ```
 
 
-```{r Summary Model selection}
+```{r Supplementary plots - applicability domain - Figures S5}
+Scatter.data <- rbind(Dataset.C[, 1:9], Dataset.C_vali[, 1:9])
+Scatter.data$Dataset <- c(rep("Dataset I", 138), rep("Dataset II", 1050))
+Scatter.data$drug.lable <- "Non-Drug"
+Scatter.data$drug.lable[c(which(Scatter.data$Chemical.Class == "Pharmaceutical" |
+                                 Scatter.data$Chemical.Class == "CiPA pharmaceutical"))] <- "Drug"
+
+Scatter.data[, 5:9] <- log10(Scatter.data[, 5:9])
+
+Scatter.data$training <- NA
+Scatter.data$training[-which(Scatter.data$Dataset == "Dataset I" & Scatter.data$drug.lable == "Drug")] <- "0"
+Scatter.data$training[which(Scatter.data$Dataset == "Dataset I" & Scatter.data$drug.lable == "Drug")] <- "1"
+Scatter.data$training <- factor(Scatter.data$training)
+Scatter.data <- Scatter.data[-which(is.na(Scatter.data$Chemical.Class)),]
+
+
+ggpairs(Scatter.data, columns = c(5:9),
+        aes(color = training),
+        upper = list(continuous = "blank"),
+        diag = list(continuous = wrap("densityDiag", alpha = 0.5)),
+        lower = list(continuous = "blank"),
+        axisLabels = "show")+
+  scale_color_manual(values = c("#C0C0C070", "red"))+
+  scale_fill_manual(values = c("#C0C0C0", "red"))+
+  labs(x="log10(value)", y="log10(value)") +
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=8, hjust=0.5, vjust=0.5),
+        panel.grid = element_blank(),
+        #legend.position = c(0.6, 0.20),
+        legend.text = element_text(color = "black"),
+        legend.background = element_rect(fill = "#00000000"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(size = 0.9),
+        strip.background = element_rect(size = 0.9),
+        strip.text = element_text(color = "black", face = "bold"),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black"),
+        axis.text = element_text(color = "black"))
+ggsave("plots/Figure S5-1.jpeg", units = "in", width = 8.5, height = 7.5)
+
+
+
+ggpairs(Scatter.data, columns = c(5:9),
+        aes(color = training),
+        upper = list(continuous = "blank"),
+        diag = list(continuous = wrap("densityDiag", alpha = 1)),
+        lower = list(continuous = wrap("points", size = 0.8)),
+        axisLabels = "show")+
+  scale_color_manual(values = c("#00000000", "red"))+
+  scale_fill_manual(values = c("#00000000", "red"))+
+  labs(x="log10(value)", y="log10(value)") +
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=8, hjust=0.5, vjust=0.5),
+        panel.grid = element_blank(),
+        #legend.position = c(0.6, 0.20),
+        legend.text = element_text(color = "black"),
+        legend.background = element_rect(fill = "#00000000"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(size = 0.9),
+        strip.background = element_rect(size = 0.9),
+        strip.text = element_text(color = "black", face = "bold"),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black"),
+        axis.text = element_text(color = "black"))
+ggsave("plots/Figure S5-2.jpeg", units = "in", width = 8.5, height = 7.5)
+
+ggpairs(Scatter.data, columns = c(5:9),
+        aes(color = training),
+        upper = list(continuous = "blank"),
+        diag = list(continuous = wrap("densityDiag", alpha = 1)),
+        lower = list(continuous = wrap("points", size = 0.8)),
+        axisLabels = "show")+
+  scale_color_manual(values = c("#C0C0C070", "#00000000"))+
+  scale_fill_manual(values = c("#C0C0C0", "#00000000"))+
+  labs(x="log10(value)", y="log10(value)") +
+  theme_bw() + 
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=8, hjust=0.5, vjust=0.5),
+        panel.grid = element_blank(),
+        #legend.position = c(0.6, 0.20),
+        legend.text = element_text(color = "black"),
+        legend.background = element_rect(fill = "#00000000"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(size = 0.9),
+        strip.background = element_rect(size = 0.9),
+        strip.text = element_text(color = "black", face = "bold"),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black"),
+        axis.text = element_text(color = "black"))
+ggsave("plots/Figure S5-3.jpeg", units = "in", width = 8.5, height = 7.5)
+
+# After producing Figs S5-1 - S5-3, then combined them in Powerpoint
+
+```
+
+
+```{r Supplementary plots - imbalance sensitivity analysis - Figures S6}
+Dataset.C <- read.csv("data/POD_Dataset I_Design C.csv") # rep notice
+
+Dataset.C$Peak_Frequency_up[Dataset.C$Peak_Frequency_up > 300] <- 300
+Dataset.C$Peak_Frequency_dn[Dataset.C$Peak_Frequency_dn > 300] <- 300
+Dataset.C$Peak_Decay_Rise_Ratio_up[Dataset.C$Peak_Decay_Rise_Ratio_up > 300] <- 300
+Dataset.C$Peak_Frequency_zero[Dataset.C$Peak_Frequency_zero > 300] <- 300
+Dataset.C$Total_Cells_zero[Dataset.C$Total_Cells_zero > 300] <- 300
+BMD50_drug_logit_data_C   <- Dataset.C[which(Dataset.C$Drug_lable == "Drug"), ]
+BMD50_drug_logit_data_C$QT.TdP_Positive_k <- as.factor(BMD50_drug_logit_data_C$QT.TdP_Positive_k)
+BMD50_drug_logit_data_C$QT.TdP_Positive_k_c <- as.factor(BMD50_drug_logit_data_C$QT.TdP_Positive_k_c)
+
+
+Sensitivity.data <- data.frame(Threshold = rep(0, 1000),
+                               AUC_of_ROC = rep(0, 1000),
+                               Sensitivity = rep(0, 1000),
+                               Specificity = rep(0, 1000),
+                               Accuracy = rep(0, 1000))
+
+for(i in 1:1000){
+  rand.nega <- sample(c(which(BMD50_drug_logit_data_C$QT.TdP_Positive_k_c == 0)), 18)
+  dat.tep <- rbind(BMD50_drug_logit_data_C[which(BMD50_drug_logit_data_C$QT.TdP_Positive_k_c == 1),], BMD50_drug_logit_data_C[rand.nega,])
+  
+  logit.model.tep <- glm(QT.TdP_Positive_k_c ~ log10(Peak_Frequency_up) + log10(Peak_Frequency_dn) + log10(Peak_Decay_Rise_Ratio_up) + 
+                           log10(Peak_Frequency_zero) + log10(Total_Cells_zero), 
+                         data = dat.tep, family = binomial(link = "logit"))
+  
+  
+  # Predicted risk
+  dat.tep$Pred.TdP.risk.5Pheno <- logit.model.tep$fitted.values
+  
+  #dat.tep$QT.TdP_Positive_k_c <- as.numeric(dat.tep$QT.TdP_Positive_k_c) - 1
+  
+  SSA.relationship.All <- data.frame(Thresholds = c(roc.curve(dat.tep$QT.TdP_Positive_k_c, 
+                                                              dat.tep$Pred.TdP.risk.5Pheno, plotit = F)$thresholds[2:36]), #[2:40][2:53]
+                                     
+                                     Sensitivity = c(roc.curve(dat.tep$QT.TdP_Positive_k_c, 
+                                                               dat.tep$Pred.TdP.risk.5Pheno, plotit = F)$true.positive.rate[2:36]),
+                                     
+                                     False.positive.rate = c(roc.curve(dat.tep$QT.TdP_Positive_k_c, 
+                                                                       dat.tep$Pred.TdP.risk.5Pheno, plotit = F)$false.positive.rate[2:36]))
+  
+  SSA.relationship.All$Specificity <- 1 - SSA.relationship.All$False.positive.rate
+  SSA.relationship.All$Accuracy <- (SSA.relationship.All$Sensitivity + SSA.relationship.All$Specificity)/2
+  SSA.relationship.All$Gmean <- (SSA.relationship.All$Sensitivity * SSA.relationship.All$Specificity)^(1/2)
+  
+  Sensitivity.data$Threshold[i] <- SSA.relationship.All$Thresholds[which.max(SSA.relationship.All$Gmean)] #####
+  
+  roc.curve <- roc(dat.tep$QT.TdP_Positive_k_c, dat.tep$Pred.TdP.risk.5Pheno)
+  Sensitivity.data$AUC_of_ROC[i] <- round(auc(dat.tep$QT.TdP_Positive_k_c, dat.tep$Pred.TdP.risk.5Pheno),3) #####
+  
+  
+  # --------------- Predict risk itself --------------- 
+  BMD50_drug_logit_data_C$Pred.TdP.risk.5Pheno <- predict(logit.model.tep, BMD50_drug_logit_data_C[, c(5:9)], type = c("response"), se.fit = TRUE)$fit
+  Predicted.risk.results_C <- BMD50_drug_logit_data_C[,c("Chemical.Name", "QT.TdP_Positive_k_c", "Pred.TdP.risk.5Pheno")]
+  Predicted.risk.results_C$QT.TdP_Positive_k_c <- factor(Predicted.risk.results_C$QT.TdP_Positive_k_c)
+  Predicted.risk.results_C$QT.TdP.risk_Lable[Predicted.risk.results_C$QT.TdP_Positive_k_c == "0"] <- "Negative"
+  Predicted.risk.results_C$QT.TdP.risk_Lable[Predicted.risk.results_C$QT.TdP_Positive_k_c == "1"] <- "Positive"
+  #Predicted.risk.results_C$QT.TdP.risk_Lable <- factor(Predicted.risk.results_C$QT.TdP.risk_Lable)
+  
+  # Predicted classfication
+  Predicted.risk.results_C$Predicted_QT.TdP.risk_Lable <- NA
+  Predicted.risk.results_C$Predicted_QT.TdP.risk_Lable[Predicted.risk.results_C$Pred.TdP.risk.5Pheno > Sensitivity.data$Threshold[i]] <- "Positive"
+  Predicted.risk.results_C$Predicted_QT.TdP.risk_Lable[Predicted.risk.results_C$Pred.TdP.risk.5Pheno < Sensitivity.data$Threshold[i]] <- "Negative"
+  #Predicted.risk.results_C$Predicted_QT.TdP.risk_Lable <- factor(Predicted.risk.results_C$Predicted_QT.TdP.risk_Lable)
+  
+  Predicted.risk.results_C$Ture.False.Lable <- NA
+  Predicted.risk.results_C$Ture.False.Lable[which(Predicted.risk.results_C$QT.TdP.risk_Lable == Predicted.risk.results_C$Predicted_QT.TdP.risk_Lable)] <- "Ture"
+  Predicted.risk.results_C$Ture.False.Lable[which(Predicted.risk.results_C$QT.TdP.risk_Lable != Predicted.risk.results_C$Predicted_QT.TdP.risk_Lable)] <- "False"
+  
+  TP <- sum(Predicted.risk.results_C$Ture.False.Lable == "Ture" & Predicted.risk.results_C$Predicted_QT.TdP.risk_Lable == "Positive")
+  TN <- sum(Predicted.risk.results_C$Ture.False.Lable == "Ture" & Predicted.risk.results_C$Predicted_QT.TdP.risk_Lable == "Negative")
+  FP <- sum(Predicted.risk.results_C$Ture.False.Lable == "False" & Predicted.risk.results_C$Predicted_QT.TdP.risk_Lable == "Positive")
+  FN <- sum(Predicted.risk.results_C$Ture.False.Lable == "False" & Predicted.risk.results_C$Predicted_QT.TdP.risk_Lable == "Negative")
+  
+  Sensitivity.data$Accuracy[i] <- (TP + TN)/(TP + TN + FP + FN)
+  Sensitivity.data$Sensitivity[i] <- TP / (TP + FN)
+  Sensitivity.data$Specificity[i] <- TN / (TN + FP)
+  
+  print(i)
+}
+
+
+Design.C.performance <- data.frame(ind = c("AUC_of_ROC", "Sensitivity", "Specificity", "Accuracy"),
+                                   values  = c(0.89, 0.89, 0.87,0.875))
+
+Sensitivity.data.summ <- ddply(stack(Sensitivity.data[, 2:5]), .(ind), summarize, 
+                          median = median(values, na.rm = T),
+                          Q5 = quantile(values, probs = c(0.05)),
+                          Q25 = quantile(values, probs = c(0.25)),
+                          Q75 = quantile(values, probs = c(0.75)),
+                          Q95 = quantile(values, probs = c(0.95)))
+
+Sensitivity.data.forplot <- stack(Sensitivity.data.summ[,2:6])
+Sensitivity.data.forplot$para <- rep(Sensitivity.data.summ$ind, 5)
+Sensitivity.data.forplot$para <- factor(Sensitivity.data.forplot$para, levels = c("AUC_of_ROC","Accuracy","Specificity","Sensitivity"))
+
+quantiles <- function(x) {
+  r <- sort(x)
+  names(r) <- c("ymin", "lower", "middle", "upper", "ymax")
+  r
+}
+
+ggplot(Sensitivity.data.forplot, aes(y=para, x=values)) +
+  stat_summary(fun.data = quantiles, geom="errorbar", position = position_dodge(0.8), size=0.8, width=0.2, color = "#0072B2")+
+  stat_summary(fun.data = quantiles, geom="boxplot", position = position_dodge(0.8), size=0.8, width=0.5, color = "#0072B2")+
+  geom_point(data=Design.C.performance, aes(x=values,y=ind),shape = 17, size = 3, color = "red")+
+  xlim(0,1)+
+  labs(y = "Performance", 
+       x= "Values")+
+  theme_bw() +
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=10, hjust=0.5, vjust=0.5),
+        panel.grid = element_blank(),
+        panel.border = element_rect(size = 1.1),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", size=12),
+        axis.text = element_text(color = "black", size=10))
+ggsave("plots/Figure S6.pdf", units = "in", width = 5.5, height = 3)
+ggsave("plots/Figure S6.jpeg", units = "in", width = 5.5, height = 3)
+```
+
+
+```{r Summary Model selection - Figure 4}
 sen_spe.dat <- read.csv("data/Summary_sen_spe.csv")
 roc.dat <- read.csv("data/Summary_ROC.csv")
 
@@ -1408,7 +1630,7 @@ roc.dat$model <- factor(roc.dat$model, c("Blinova et al. 2018", "A", "B", "C"))
 f.1 <- 
 ggplot(data=sen_spe.dat[which(sen_spe.dat$index == "Sensitivity"),], aes(x=model, y=value, fill=model)) +
   geom_bar(stat="identity", width=0.5) +
-  geom_text(aes(label = round(value, digits = 2)), vjust = -0.5)+
+  geom_text(aes(label = round(value, digits = 2)), vjust = -0.5, size = 5)+
   scale_y_continuous(limits = c(0, 1))+
   facet_wrap(~type)+
   scale_x_discrete(labels=c('Blinova et al. \n 2018', 'A', 'B', 'C')) + 
@@ -1419,18 +1641,20 @@ ggplot(data=sen_spe.dat[which(sen_spe.dat$index == "Sensitivity"),], aes(x=model
   ggtitle("Sensitivity")+
   theme(text=element_text(family="sans", face="plain", color="#000000", hjust=0.5, vjust=0.5), 
         legend.position = "none",
-        plot.title = element_text(size = 15, color = "black", face = "bold"),
+        plot.title = element_text(size = 18, color = "black", face = "bold"),
         plot.margin = margin(0, 0, 1, 0),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
+        panel.border = element_rect(size = 0.9),
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(size = 12,color = "black", face = "bold"),
-        axis.text = element_text(size = 10,color = "black", face = "bold"),
-        strip.text.x = element_text(size = 12, color = "black", face = "bold"))
+        axis.title = element_text(size = 16,color = "black"),
+        axis.text = element_text(size = 14,color = "black"),
+        strip.background = element_rect(size = 0.9),
+        strip.text.x = element_text(size = 16, color = "black"))
 f.2 <-
 ggplot(data=sen_spe.dat[which(sen_spe.dat$index == "Specificity"),], aes(x=model, y=value, fill=model)) +
   geom_bar(stat="identity", width=0.5) +
-  geom_text(aes(label = round(value, digits = 2)), vjust = -0.5)+
+  geom_text(aes(label = round(value, digits = 2)), vjust = -0.5, size = 5)+
   scale_y_continuous(limits = c(0, 1.05))+
   facet_wrap(~type)+
   scale_x_discrete(labels=c('Blinova et al. \n 2018', 'A', 'B', 'C')) + 
@@ -1441,20 +1665,22 @@ ggplot(data=sen_spe.dat[which(sen_spe.dat$index == "Specificity"),], aes(x=model
   ggtitle("Specificity")+
   theme(text=element_text(family="sans", face="plain", color="#000000", hjust=0.5, vjust=0.5), 
         legend.position = "none",
-        plot.title = element_text(size = 15, color = "black", face = "bold"),
+        plot.title = element_text(size = 18, color = "black", face = "bold"),
         plot.margin = margin(0, 0, 1, 0),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
+        panel.border = element_rect(size = 0.9),
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(size = 12,color = "black", face = "bold"),
-        axis.text = element_text(size = 10,color = "black", face = "bold"),
-        strip.text.x = element_text(size = 12, color = "black", face = "bold"))
+        axis.title = element_text(size = 16,color = "black"),
+        axis.text = element_text(size = 14,color = "black"),
+        strip.background = element_rect(size = 0.9),
+        strip.text.x = element_text(size = 16, color = "black"))
 
 f.3 <- 
 ggplot(data=roc.dat, aes(x=model, y=med, fill=model)) +
   geom_bar( stat="identity", width=0.5) +
   geom_errorbar(aes(x=model, ymin=med-sd, ymax=med+sd), width=0.2, colour="black") +
-  geom_text(aes(label = round(med, digits = 2)), vjust = -0.5)+
+  geom_text(aes(label = round(med, digits = 2)), vjust = -0.5, size = 5)+
   #geom_point(aes(x=model, y=med, color=model), size=2.5) +
   #geom_point(aes(x=model, y=min, color=model), size=2.5) +
   #geom_point(aes(x=model, y=max, color=model), size=2.5) +
@@ -1465,27 +1691,33 @@ ggplot(data=roc.dat, aes(x=model, y=med, fill=model)) +
   facet_wrap(~type)+
   scale_fill_manual(values = c("#FF6000", "#2ADBB4","#2A88DB", "#2A2DDB"))+
   theme_bw() + 
-  xlab("Model") +
+  xlab("Design") +
   ylab("")+
   ggtitle("AUC of ROC")+
   theme(text=element_text(family="sans", face="plain", color="#000000", hjust=0.5, vjust=0.5), 
         legend.position = "none",
-        plot.title = element_text(size = 15, color = "black", face = "bold"),
+        plot.title = element_text(size = 18, color = "black", face = "bold"),
         plot.margin = margin(0, 0, 1, 0),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
+        panel.border = element_rect(size = 0.9),
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(size = 12,color = "black", face = "bold"),
-        axis.text = element_text(size = 10,color = "black", face = "bold"),
-        strip.text.x = element_text(size = 12, color = "black", face = "bold"))
+        axis.title = element_text(size = 16,color = "black"),
+        axis.text = element_text(size = 14,color = "black"),
+        strip.background = element_rect(size = 0.9),
+        strip.text.x = element_text(size = 16, color = "black"))
 
-tiff(width = 12, height = 10.3, "plots/Figure 4.tiff", units = "in", res=300)
+jpeg(width = 12, height = 10.3, "plots/Figure 4.jpeg", units = "in", res=600)
+f.1 + f.2 + f.3 + plot_layout(height = c(1/3, 1/3, 1/3))
+dev.off()
+
+pdf(width = 12, height = 10.3, "plots/Figure 4.pdf")
 f.1 + f.2 + f.3 + plot_layout(height = c(1/3, 1/3, 1/3))
 dev.off()
 ```
 
 
-```{r Predict TdP risk of environmental chemical (bar chart)}
+```{r Predict TdP risk of environmental chemical (bar chart) - Figure 5}
 Threshold <- 0.270298
 Envir.Dataset.C <- Dataset.C[-c(which(Dataset.C$Drug_lable == "Drug")), ]
 Envir.Dataset.C$Pred.TdP.risk.5Pheno <- predict(BMD50_5pheno_TdP.risk.model_C, Envir.Dataset.C, type = "response")
@@ -1502,53 +1734,73 @@ counts <- ddply(Envir.Dataset.C, .(Envir.Dataset.C$Chemical.Class, Envir.Dataset
 names(counts) <- c("Class", "TdP", "Count")
 counts$TdP <- factor(counts$TdP, levels = c("Positive", "Negative"))
 
+prop <- transform(counts, percent = ave(Count, Class, FUN = prop.table), sum = ave(Count, Class, FUN = sum))
+prop$nega.num <- prop$sum - prop$Count
+prop$percent.lab <- paste(prop$nega.num, prop$sum, sep = "/")
+prop <- prop[which(prop$TdP == "Negative"),]
+
 Fig.RISK.envi.DAT1.bar <- 
   ggplot(counts, aes(fill=TdP, y=Count, x=Class)) + 
   geom_bar(position="stack", stat="identity") +
+  geom_text(data = prop, aes(x=Class, y = sum, label = percent.lab), vjust = -0.5, size=4)+
+  ylim(c(0, 25))+
   ggtitle("A. Dataset I") +
   theme_bw() + 
   theme(text=element_text(family="sans", face="plain", color="#000000"),
         panel.grid = element_blank(),
         panel.border = element_rect(size = 1.2),
+        plot.title = element_text(size = 18, color = "black", face = "bold"),
         #plot.margin = margin(0, 1, 0, 3),
-        legend.title = element_text(color = "black", face = "bold", size=10),
+        legend.title = element_text(color = "black", size=14),
         legend.position = "none", 
-        legend.text = element_text(color = "black", face = "bold", size=8),
+        legend.text = element_text(color = "black", size=12),
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold", size=12),
-        axis.text.y = element_text(color = "black", face = "bold", size=10),
-        axis.text.x = element_text(color = "black", face = "bold", angle = 55, hjust=1, size=10),
-        plot.title = element_text(face="bold", size=15))
+        axis.title = element_text(color = "black", size=16),
+        axis.text.y = element_text(color = "black", size=14),
+        axis.text.x = element_text(color = "black", angle = 60, hjust=1, size=14))
+
 
 counts <- ddply(Envir.Dataset.C_vali, .(Envir.Dataset.C_vali$Chemical.Class, Envir.Dataset.C_vali$Predicted_QT.TdP.risk_Lable), nrow)
 names(counts) <- c("Class", "TdP", "Count")
 counts$TdP <- factor(counts$TdP, levels = c("Positive", "Negative"))
 
+prop <- transform(counts, percent = ave(Count, Class, FUN = prop.table), sum = ave(Count, Class, FUN = sum))
+prop$nega.num <- prop$sum - prop$Count
+prop$percent.lab <- paste(prop$nega.num, prop$sum, sep = "/")
+prop <- prop[which(prop$TdP == "Negative"),]
+
 Fig.RISK.envi.DAT2.bar <- 
   ggplot(counts, aes(fill=TdP, y=Count, x=Class)) + 
   geom_bar(position="stack", stat="identity") +
+  geom_text(data = prop, aes(x=Class, y = sum, label = percent.lab), vjust = -0.5, size=4)+
+  ylim(c(0, 200))+
   ggtitle("B. Dataset II") +
   theme_bw() + 
   theme(text=element_text(family="sans", face="plain", color="#000000"),
         panel.grid = element_blank(),
         panel.border = element_rect(size = 1.2),
+        plot.title = element_text(size = 18, color = "black", face = "bold"),
         #plot.margin = margin(0, 1, 0, 3),
-        legend.title = element_text(color = "black", face = "bold", size=10),
-        legend.position = c(0.9, 0.8), 
-        legend.text = element_text(color = "black", face = "bold", size=8),
+        legend.title = element_text(color = "black", size=14),
+        legend.position = c(0.89, 0.8), 
+        legend.key.size = unit(0.5, 'cm'),
+        legend.text = element_text(color = "black", size=12),
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold", size=12),
-        axis.text.y = element_text(color = "black", face = "bold", size=12),
-        axis.text.x = element_text(color = "black", face = "bold", angle = 55, hjust=1, size=10),
-        plot.title = element_text(face="bold", size=15))
+        axis.title = element_text(color = "black", size=16),
+        axis.text.y = element_text(color = "black", size=14),
+        axis.text.x = element_text(color = "black", angle = 60, hjust=1, size=14))
 
-tiff(width = 13, height = 5.5, "plots/Figure 5.tiff", units = "in", res=300)
+jpeg(width = 13, height = 5.5, "plots/Figure 5.jpeg", units = "in", res=600)
+Fig.RISK.envi.DAT1.bar + Fig.RISK.envi.DAT2.bar + plot_layout(widths = c(1/2, 1/2))
+dev.off()
+
+pdf(width = 13, height = 5.5, "plots/Figure 5.pdf")
 Fig.RISK.envi.DAT1.bar + Fig.RISK.envi.DAT2.bar + plot_layout(widths = c(1/2, 1/2))
 dev.off()
 ```
 
 
-```{r Predict TdP risk and MOE of environmental chemical}
+```{r Predict TdP risk and MOE of environmental chemical - Figure 6}
 # Note: The following two commented section are for preparing data for calculating MOE; once generating files "Envir.Dataset I_Design C_Positive.csv" and "Envir.Dataset II_Design C_Positive.csv", no need to run again.
 # -------- Traning dataset prepare ---------
 #Envir.Dataset.C_Positive <- Envir.Dataset.C[c(which(Envir.Dataset.C$Predicted_QT.TdP.risk_Lable == "Positive")), ]
@@ -1569,6 +1821,28 @@ dev.off()
 #Envir.Dataset.C_vali_Positive$Css <- as.numeric(Envir.Dataset.C_vali_Positive$Css)
 #Envir.Dataset.C_vali_Positive <- Envir.Dataset.C_vali_Positive[-c(which(is.na(Envir.Dataset.C_vali_Positive$Css))), ]
 #write.csv(Envir.Dataset.C_vali_Positive, "data/Envir.Dataset II_Design C_Positive.csv")
+
+# -------- Compile the parameters used in IVIVE -------- 
+
+pbtk.para <- data.frame(matrix(NA, 105, 41))
+colnames(pbtk.para) <- c("Chemical.Number", "Chemical.Name", "CAS", names(a))
+pbtk.para$Chemical.Number <- Envir.RISK.MOE.data$Chemical.Number
+pbtk.para$Chemical.Name <- Envir.RISK.MOE.data$Chemical.Name
+pbtk.para$CAS <- Envir.RISK.MOE.data$Chemical.CAS
+
+
+for(i in 1:105){
+  
+  cas.tep <- pbtk.para$CAS[i]
+  
+  para.tep <- parameterize_pbtk(chem.cas = cas.tep)
+  
+  pbtk.para[i,4:41] <- para.tep
+  
+  print(i)
+}
+
+write.csv(pbtk.para, "pbtk.para.table.csv")
 
 # -------- Traning dataset ---------
 Envir.Dataset.C_Positive <- read.csv("data/Envir.Dataset I_Design C_Positive.csv")
@@ -1630,82 +1904,209 @@ Envir.Dataset.C_vali_Positive$Dataset <- "II"
 # -------- Plot data prepare -------- 
 Envir.RISK.MOE.data <- rbind(Envir.Dataset.C_Positive, Envir.Dataset.C_vali_Positive)
 Envir.RISK.MOE.data$Chemical.Class <- as.factor(Envir.RISK.MOE.data$Chemical.Class)
-Envir.RISK.MOE.data$order <- as.numeric(as.factor(Envir.RISK.MOE.data$Chemical.Class))*10 + Envir.RISK.MOE.data$Pred.TdP.risk.5Pheno
+Envir.RISK.MOE.data$order <- as.numeric(as.factor(Envir.RISK.MOE.data$Chemical.Class))*1e+9 + Envir.RISK.MOE.data$MOE_95
+
 colnames(Envir.RISK.MOE.data)[16] <- "Sensitive endpoint"
 
-Fig.RISK.envi <- 
-ggplot(Envir.RISK.MOE.data, aes(x=reorder(Chemical.Name, -order), y=Pred.TdP.risk.5Pheno, fill = Chemical.Class, width=.4)) +
-  geom_bar(stat="identity", position="identity", size = 1) +
-  scale_y_continuous(breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1), limits = c(0, 1))+
-  #scale_color_manual(values = c("#5964FF", "#FF5964"))+
-  labs(x = "Chemical", 
-       y= "Probability of positive for TdP")+
-  ggtitle("A")+
-  coord_flip()+
-  theme_bw() + 
-  theme(text=element_text(family="sans", face="plain", color="#000000", size=10),
-        panel.grid = element_blank(),
-        panel.grid.major.y = element_line(color = "gray", linetype = 3),
-        panel.border = element_rect(size = 1.2),
-        legend.title = element_text(color = "black", face = "bold", size=10),
-        legend.text = element_text(color = "black", face = "bold", size=8),
-        legend.box.background = element_rect(colour = "black"),
-        legend.background = element_blank(),
-        legend.key.size = unit(0.5, 'cm'),
-        legend.position = c(0.85, 0.26), 
-        axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold", size=15),
-        axis.text.y = element_text(color = "black", face = "bold"),
-        axis.text.x = element_text(color = "black", size=12),
-        plot.title = element_text(face="bold", size=18))
+Envir.RISK.MOE.data$Chemical.CAS[1:3] <- c("52645-53-1*","70-30-4*","50-29-3*")
+Envir.RISK.MOE.data$Chemical.CAS[104:105] <- c("119-47-1 (rep)","39515-41-8 (rep)")
 
-
-Fig.MOE.envi <- 
+Figure.6 <- 
 ggplot()+
-  geom_point(data = Envir.RISK.MOE.data, aes(x=reorder(Chemical.Name, -order), y=MOE_med, shape = `Sensitive endpoint`), stat = "identity", size = 2.5, color = "white") +
+  geom_point(data = Envir.RISK.MOE.data, aes(x=reorder(Chemical.CAS, -order), y=MOE_med, shape = `Sensitive endpoint`), stat = "identity", size = 2.5, color = "white") +
   geom_rect(aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
-            data = data.frame(xmin = -Inf, xmax = Inf, ymin = 0, ymax = 1), fill="#FEBBAD60") +
+            data = data.frame(xmin = -Inf, xmax = Inf, ymin = 0, ymax = 1), fill="#D3D1D170") +
   geom_rect(aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
-            data = data.frame(xmin = -Inf, xmax = Inf, ymin = 1, ymax = 100), fill="#FED6CE60") +
+            data = data.frame(xmin = -Inf, xmax = Inf, ymin = 1, ymax = 100), fill="#E7E7E770") +
   geom_rect(aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
-            data = data.frame(xmin = -Inf, xmax = Inf, ymin = 100, ymax = Inf), fill="#FFF1EF60") +
+            data = data.frame(xmin = -Inf, xmax = Inf, ymin = 100, ymax = Inf), fill="#F8F8F850") +
   scale_x_discrete()+
   
-  geom_point(data = Envir.RISK.MOE.data, aes(x=reorder(Chemical.Name, -order), y=MOE_med, shape = `Sensitive endpoint`), stat = "identity", size = 2.5, color = "#016FB9") +
-  geom_point(data = Envir.RISK.MOE.data, aes(x=Chemical.Name, y=MOE_95, shape = `Sensitive endpoint`), stat = "identity", size = 2.5, color = "#016FB9") +
-  geom_segment(data = Envir.RISK.MOE.data, aes(x = Chemical.Name, y = MOE_med, xend = Chemical.Name, yend = MOE_95), size = 0.9, color = "#016FB9")+
+  geom_point(data = Envir.RISK.MOE.data, aes(x=reorder(Chemical.CAS, -order), y=MOE_med, shape = `Sensitive endpoint`, color = Chemical.Class), stat = "identity", size = 2.5) +
+  geom_point(data = Envir.RISK.MOE.data, aes(x=Chemical.CAS, y=MOE_95, shape = `Sensitive endpoint`, color = Chemical.Class), stat = "identity", size = 2.5) +
+  geom_segment(data = Envir.RISK.MOE.data, aes(x = Chemical.CAS, y = MOE_med, xend = Chemical.CAS, yend = MOE_95, color = Chemical.Class), size = 0.9)+
   
   scale_shape_manual(values = c(16, 17, 15, 18))+
+  #scale_y_log10(breaks = custom_breaks, labels = every_nth(custom_breaks, 2, inverse = T), limits = plot.lim)+
   scale_y_log10(lim = c(1E-4, 1E+10),
-                breaks = trans_breaks("log10", function(x) 10^x, n = 6),
-                labels = trans_format("log10", math_format(10^.x))) +
+                breaks = c(1E-4, 1E-3, 1E-2, 1E-1, 1E+0, 1E+1, 1E+2, 1E+3, 1E+4, 1E+5,
+                           1E+6, 1E+7, 1E+8, 1E+9, 1E+10),
+                labels = c(-4, "", -2, "", 0, "", 2, "", 4, "",
+                           6, "", 8, "", 10)) +
+  facet_col(vars(Chemical.Class), scales = "free_y", space = "free")+
   theme_bw()+
   coord_flip()+
-  labs(x = "", y = "Margin of Exposure")+
-  ggtitle("B") + 
-  theme(text=element_text(family="sans", face="plain", color="#000000", size=10),
+  labs(x = "Chemical", y = "log10(Margin of Exposure)")+
+  guides(color = "none")+
+  theme(text=element_text(family="sans", face="plain", color="#000000"),
         panel.grid = element_blank(),
         panel.grid.major.y = element_line(color = "gray", linetype = 3),
-        panel.border = element_rect(size = 1.2),
-        legend.position = c(0.155, 0.313),  
-        legend.title = element_text(color = "black", face = "bold", size=10),
-        legend.text = element_text(color = "black", face = "bold", size=8),
-        legend.box.background = element_rect(colour = "black"),
+        panel.border = element_rect(size = 0.8),
+        #legend.position = c(0.18, 0.2), 
+        legend.position = "none",
+        legend.title = element_text(color = "black",size = 10),
+        legend.text = element_text(color = "black",size = 9),
+        legend.box.background = element_rect(colour = "black", fill = "white"),
         legend.background = element_blank(),
-        legend.key.size = unit(0.5, 'cm'),
+        legend.key.size = unit(0.4, 'cm'),
+        strip.text = element_text(color = "black",size = 10),
+        strip.background = element_rect(size = 0.8),
         axis.ticks = element_line(color = "black"),
-        axis.title = element_text(color = "black", face = "bold", size=15),
-        axis.text.x = element_text(color = "black", size=12),
-        axis.text.y = element_blank(),
-        plot.title = element_text(face="bold", size=18))
+        axis.title = element_text(color = "black",size = 12),
+        axis.text.y = element_text(color = "black"),
+        axis.text.x = element_text(color = "black"))
 
-tiff(width = 18, height = 18, "plots/Figure 6.tiff", units = "in", res=400)
-Fig.RISK.envi + Fig.MOE.envi + plot_layout(widths = c(1/2, 1/2))
+
+jpeg(width = 5, height = 17.5, "plots/Figure 6.jpeg", units = "in", res=600)
+Figure.6
 dev.off()
+
+pdf(width = 5, height = 17.5, "plots/Figure 6.pdf")
+Figure.6
+dev.off()
+
 ```
 
 
-```{r Reproducibility evaluation}
+```{r Supplementary plots - compare to RFD - Figures S7}
+Css.data <- rbind(Envir.Dataset.C_Positive[,c(1:3,15)], Envir.Dataset.C_vali_Positive[, c(1:3,15)])
+Css.data$Css <- NA
+for(i in 1:105){
+  Css.data$Css[i] <- try(calc_css(chem.cas = Css.data$Chemical.CAS[i],output.units = "uM")[[1]])
+  print(i)
+}
+
+#a <- parameterize_pbtk(chem.cas = Css.data$Chemical.CAS[i])
+
+RSL.tab <- read.csv("RSL.table.csv")
+Css.data$RfD <- NA
+for(i in 1:105){
+  
+  if (identical(which(RSL.tab$CAS == Css.data$Chemical.CAS[i]), integer(0))){
+    Css.data$RfD[i] <- NA
+  } else {
+    Css.data$RfD[i] <- RSL.tab$RfD[which(RSL.tab$CAS == Css.data$Chemical.CAS[i])]
+  }
+  print(i)
+  
+}
+
+
+RSL.cal.list <- which(Css.data$RfD > 0)
+Css.data$RSL_to_Css <- NA
+for(i in 1:length(RSL.cal.list)){
+  
+  Css.data$RSL_to_Css[RSL.cal.list[i]] <- calc_css(chem.cas = Css.data$Chemical.CAS[RSL.cal.list[i]],
+                                                   doses.per.day = 1,
+                                                   daily.dose = Css.data$RfD[RSL.cal.list[i]],
+                                                   output.units = "uM")[[1]]
+  print(i)
+}
+
+Css.data$ratio <- Css.data$RSL_to_Css/Css.data$minPOD
+
+RFD.plot <- 
+ggplot(Css.data)+
+  geom_point(aes(x=minPOD, y=RSL_to_Css),size=2, color="#2A88DB")+
+  geom_point(data=subset(Css.data, ratio >1),
+            aes(x=minPOD, y=RSL_to_Css), size=2, color="red")+
+  
+  geom_abline(slope=1, color="gray",size=0.6) +
+  geom_abline(slope=1, intercept=-1, linetype = "dashed", color="gray",size=0.6) +
+  geom_abline(slope=1, intercept=-2, linetype = "dotted", color="gray",size=0.6) +
+  
+  geom_abline(slope=1, intercept=1, linetype = "dashed", color="gray",size=0.6) +
+  geom_abline(slope=1, intercept=2, linetype = "dotted", color="gray",size=0.6) +
+  
+  geom_text(data=subset(Css.data, ratio >1),
+            aes(x=minPOD/3, y=RSL_to_Css,label=Chemical.Name), size=3, color="red")+
+
+  scale_y_log10(lim = c(1E-5, 100),
+                breaks = trans_breaks("log10", function(x) 10^x, n = 6),
+                labels = trans_format("log10", math_format(10^.x))) +
+  scale_x_log10(lim = c(1E-5, 100),
+                breaks = trans_breaks("log10", function(x) 10^x, n = 6),
+                labels = trans_format("log10", math_format(10^.x))) +
+  ggtitle(label = "A")+
+
+  labs(y = "Css from RfD (uM)", 
+       x= "Minimum POD (uM)")+
+  theme_bw() +
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=10, hjust=0.5, vjust=0.5),
+        plot.title = element_text(color = "black", face = "bold", size=14),
+        panel.grid = element_blank(),
+        panel.border = element_rect(size = 1.1),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", size=12),
+        axis.text = element_text(color = "black", size=10))
+#ggsave("plots/Figure RSL.jpeg", units = "in", width = 6, height = 5.5)
+
+
+
+Envir.RISK.MOE.data$RfD <- NA
+for(i in 1:105){
+  
+  if (identical(which(RSL.tab$CAS == Envir.RISK.MOE.data$Chemical.CAS[i]), integer(0))){
+    Envir.RISK.MOE.data$RfD[i] <- NA
+  } else {
+    Envir.RISK.MOE.data$RfD[i] <- RSL.tab$RfD[which(RSL.tab$CAS == Envir.RISK.MOE.data$Chemical.CAS[i])]
+  }
+  print(i)
+  
+}
+
+Envir.RISK.MOE.data$HQ_RFD <- Envir.RISK.MOE.data$seem3.u95/Envir.RISK.MOE.data$RfD
+Envir.RISK.MOE.data$HQ_invitro <- Envir.RISK.MOE.data$Css*Envir.RISK.MOE.data$seem3.u95/(Envir.RISK.MOE.data$minPOD/10)
+
+Envir.RISK.MOE.data <- cbind(Envir.RISK.MOE.data, Css.data[, 7:8])
+
+HQ.plot <-
+ggplot(Envir.RISK.MOE.data)+
+  geom_point(aes(x=HQ_invitro, y=HQ_RFD),size=2, color="#2A88DB")+
+  geom_point(data=subset(Envir.RISK.MOE.data, ratio>1),
+            aes(x=HQ_invitro, y=HQ_RFD), size=2, color="red")+
+  
+  geom_abline(slope=1, color="gray",size=0.6) +
+  geom_hline(yintercept=1, color="gray",linetype = "dashed",size=0.6) +
+  geom_vline(xintercept=1, color="gray",linetype = "dashed",size=0.6) +
+  #geom_text(data=subset(Envir.RISK.MOE.data, ((HQ_RFD>1 & HQ_invitro<1))),
+            #aes(x=HQ_invitro, y=HQ_RFD/1.5,label=Chemical.Name), size=3, color="darkblue")+
+  
+  geom_text(data=subset(Envir.RISK.MOE.data, ratio>1),
+            aes(x=HQ_invitro, y=HQ_RFD/1.5,label=Chemical.Name), size=3, color="red")+
+  
+  scale_y_log10(lim = c(1E-8, 200),
+                breaks = trans_breaks("log10", function(x) 10^x, n = 6),
+                labels = trans_format("log10", math_format(10^.x))) +
+  scale_x_log10(lim = c(1E-8, 200),
+                breaks = trans_breaks("log10", function(x) 10^x, n = 6),
+                labels = trans_format("log10", math_format(10^.x))) +
+  ggtitle(label = "B")+
+  labs(y = "HQ_RfD", 
+       x= "HQ_in vitro")+
+  theme_bw() +
+  theme(text=element_text(family="sans", face="plain", color="#000000", size=10, hjust=0.5, vjust=0.5),
+        plot.title = element_text(color = "black", face = "bold", size=14),
+        panel.grid = element_blank(),
+        panel.border = element_rect(size = 1.1),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black", size=12),
+        axis.text = element_text(color = "black", size=10))
+
+#ggsave("plots/Figure RSL.jpeg", units = "in", width = 6, height = 5.5)
+
+jpeg(width = 12, height = 5.5, "plots/Figure S7.jpeg", units = "in", res=600)
+RFD.plot + HQ.plot + plot_layout(widths = c(1/2, 1/2))
+dev.off()
+
+pdf(width = 12, height = 5.5, "plots/Figure S7.pdf")
+RFD.plot + HQ.plot + plot_layout(widths = c(1/2, 1/2))
+dev.off()
+
+```
+
+
+```{r Reproducibility evaluation - DATA for Table S7}
 Dataset.C$Predicted_QT.TdP.risk <- predict(BMD50_5pheno_TdP.risk.model_C, Dataset.C, type = c("response"))
 Dataset.C_vali$Predicted_QT.TdP.risk <- predict(BMD50_5pheno_TdP.risk.model_C, Dataset.C_vali, type = c("response"))
 
