@@ -1978,7 +1978,7 @@ for(i in 1:105){
 
 #a <- parameterize_pbtk(chem.cas = Css.data$Chemical.CAS[i])
 
-RSL.tab <- read.csv("RSL.table.csv")
+RSL.tab <- read.csv("data/RSL.table.csv")
 Css.data$RfD <- NA
 for(i in 1:105){
   
